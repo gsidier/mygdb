@@ -1,11 +1,20 @@
+import os
+import pty
 import subprocess
 import threading
 
 import gdbmi_output_parser
 from gdb_commands import GdbCommandBuilder
 
-def gdb():
-	return subprocess.Popen(["gdb", "--interpreter=mi"], 0, None, subprocess.PIPE, subprocess.PIPE, subprocess.PIPE)
+class GdbMI(object):
+	def __init__(self):	
+		master, slave = pty.openpty()
+		self.targetio = os.fdopen(master, 'rw')
+		tty = os.ttyname(slave)
+		self.proc = subprocess.Popen(["gdb", "--tty=%s" % tty, "--interpreter=mi"], 0, None, subprocess.PIPE, subprocess.PIPE, subprocess.PIPE)
+		self.gdbin = self.proc.stdin
+		self.gdbout = self.proc.stdout
+		self.gdberr = self.proc.stderr
 
 class GdbController(GdbCommandBuilder):
 	def __init__(self, gdb_instance, output_handler):
@@ -13,22 +22,27 @@ class GdbController(GdbCommandBuilder):
 		self.output_handler = output_handler
 		
 		self.output_hist = []
+		self.target_hist = []
 	
+		self.target_output_thread = threading.Thread(target = self._target_output_thread, args = [self.gdb.targetio])
+		self.target_output_thread.setDaemon(True)
+		self.target_output_thread.start()
+
 		self.gdbmi_output_parser = gdbmi_output_parser.output(self.output_handler)
 	
-		self.gdb_output_thread = threading.Thread(target = self._gdb_raw_output_thread, args = [self.gdb.stdout])
+		self.gdb_output_thread = threading.Thread(target = self._gdb_raw_output_thread, args = [self.gdb.gdbout])
 		self.gdb_output_thread.setDaemon(True)
 		self.gdb_output_thread.start()
 		
-		self.gdb_error_thread = threading.Thread(target = self._gdb_error_thread, args = [self.gdb.stderr])
+		self.gdb_error_thread = threading.Thread(target = self._gdb_error_thread, args = [self.gdb.gdberr])
 		self.gdb_error_thread.setDaemon(True)
 		self.gdb_error_thread.start()
-
+	
 	def _send(self, command, token = None):
 		print("SENDING[%s]: %s" % (str(token), command))
-		self.gdb.stdin.write(str(token))
-		self.gdb.stdin.write(command.strip())
-		self.gdb.stdin.write("\n")
+		self.gdb.gdbin.write(str(token))
+		self.gdb.gdbin.write(command.strip())
+		self.gdb.gdbin.write("\n")
 
 	def _gdb_raw_output_thread(self, stream):
 		while True:
@@ -47,6 +61,14 @@ class GdbController(GdbCommandBuilder):
 			if line == '': break
 			print("GDB error: " + line)
 		print("(GDB stderr : closes)")
+	
+	def _target_output_thread(self, stream):
+		while True:
+			line = stream.readline()
+			if line == '': break
+			print("TARGET says: " + line)
+			self.target_hist.append(line)
+		print("(TARGET stdout : closes)")
 
 
 class EventSlot(object):
@@ -177,8 +199,8 @@ class GdbSession(object):
 		self.controller.nexti()
 
 if __name__ == '__main__':
-	g = gdb()
-	gin,gout,gerr = g.stdin,g.stdout,g.stderr
+	g = GdbMI()
+	gin,gout,gerr = g.gdbin,g.gdbout,g.gdberr
 	#G = GdbController(g)
 	S = GdbSession(g)
 	G = S.controller
