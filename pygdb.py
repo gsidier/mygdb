@@ -201,7 +201,6 @@ class GdbSession(object):
 if __name__ == '__main__':
 	g = GdbMI()
 	gin,gout,gerr = g.gdbin,g.gdbout,g.gdberr
-	#G = GdbController(g)
 	S = GdbSession(g)
 	G = S.controller
 
