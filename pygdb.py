@@ -110,11 +110,17 @@ class GdbSession(object):
 		self._file = None
 
 		self._response_handlers = {}
-
+		
+		# State data
+		self.threadid = None
+		
 		# Events
 		self.onError = EventSlot() # GdbSession, token, msg
 		self.onFileChanged = EventSlot() # GdbSession, filename
 		self.onBreakpointSet = EventSlot() # GdbSession, breakpoint_desc
+		self.onThreadSwitch = EventSlot() # GdbSession, threadid
+		self.onFrameChange = EventSlot() # GdbSession, frameinfo
+		self.onProcessedResponse = EventSlot() # GdbSession
 
 	def err_check_response(self, on_response):
 		def on_response_or_err(response):
@@ -127,7 +133,7 @@ class GdbSession(object):
 		return on_response_or_err
 
 	LAST_RESULT=None
-
+	
 	def _handle_results(self, token, resultClass, results):
 		self.LAST_RESULT = results
 		if resultClass == 'error':
@@ -136,7 +142,12 @@ class GdbSession(object):
 				print "CANCELLING HANDLER FOR ", token
 				self._response_handlers.pop(token)
 		else:
-			print "CHECK for token: ", token
+			if hasattr(results, 'thread-id'):
+				self._update_thread_id(results['thread-id'])
+			if hasattr(results, 'frame'):
+				self._update_frame(results.frame)
+
+			print "CHECK for token: ", token	
 			if self._response_handlers.has_key(token):
 				print "TOKEN FOUND: ", repr(token)
 				handler = self._response_handlers[token]
@@ -147,6 +158,17 @@ class GdbSession(object):
 			else:
 				print "TOKEN NOT FOUND: ", repr(token)
 				return False
+
+			self.onProcessedResponse.broadcast(self)
+
+	def _update_thread_id(self, threadid):
+		threadid = int(threadid)
+		if threadid != self.threadid:
+			self.threadid = threadid
+			self.onThreadSwitch(self, self.threadid)
+
+	def _update_frame(self, frame):
+		self.onFrameChange(self, frame)
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
