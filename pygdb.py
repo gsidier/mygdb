@@ -51,7 +51,7 @@ class GdbController(GdbCommandBuilder):
 			print("GDB says: " + line)
 			self.output_hist.append(line)
 
-			self.gdbmi_output_parser.parseString(line) # TODO : ..., parseAll=True)
+			self.gdbmi_output_parser.parseString(line, parseAll=True)
 		
 		print("GDB: Finished")
 	
@@ -126,8 +126,10 @@ class GdbSession(object):
 			return on_response(response)
 		return on_response_or_err
 
+	LAST_RESULT=None
+
 	def _handle_results(self, token, resultClass, results):
-		print "RESULTS = ", results
+		self.LAST_RESULT = results
 		if resultClass == 'error':
 			print "ERROR ENCOUNTERED: ", results
 			if self._response_handlers.has_key(token):
