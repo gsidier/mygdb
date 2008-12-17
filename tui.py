@@ -7,6 +7,9 @@ class View(object):
 	def draw(self, canvas):
 		pass
 
+class Controller(object):
+	pass
+
 class SourceFileView(View):
 
 	def __init__(self, gdbtui, win):
@@ -67,7 +70,30 @@ class SourceFileView(View):
 
 	def onFrameChange(self, session, frame):
 		self.update_src_file(frame.fullname)
+
+class CommandInput(Controller):
+	def __init__(self, gdbtui, win):
+		self.app = gdbtui
+		self.win = win
 	
+	def onInputCommand(self):
+		curses.echo()
+		cmd = self.win.getstr()
+		curses.noecho()
+
+class CommandPanel(View):
+	def __init__(self, gdbtui, win):
+		self.app = gdbtui
+		self.win = win
+		
+	def draw(self):
+		self.win.clear()
+
+class TopLevelKeyboardInput(Controller):
+	def __init__(self, gdbtui, win):
+		self.app = gdbtui
+		self.win = win
+
 class PyGdbTui(object):
 
 	def __init__(self, gdb, topwin):
@@ -76,5 +102,8 @@ class PyGdbTui(object):
 		self.topwin = topwin
 		curses.raw()
 		self.topwin.keypad(1)
-		
+	
+		# Events
+		onInputCommand = pygdb.EventSlot()
+			
 
