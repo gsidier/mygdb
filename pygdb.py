@@ -142,11 +142,7 @@ class GdbSession(object):
 				print "CANCELLING HANDLER FOR ", token
 				self._response_handlers.pop(token)
 		else:
-			if hasattr(results, 'thread-id'):
-				self._update_thread_id(results['thread-id'])
-			if hasattr(results, 'frame'):
-				self._update_frame(results.frame)
-
+			# call custom handler if any
 			print "CHECK for token: ", token	
 			if self._response_handlers.has_key(token):
 				print "TOKEN FOUND: ", repr(token)
@@ -158,6 +154,12 @@ class GdbSession(object):
 			else:
 				print "TOKEN NOT FOUND: ", repr(token)
 				return False
+			
+			# Event based handlers
+			if hasattr(results, 'thread-id'):
+				self._update_thread_id(results['thread-id'])
+			if hasattr(results, 'frame'):
+				self._update_frame(results.frame)
 
 			self.onProcessedResponse.broadcast(self)
 
