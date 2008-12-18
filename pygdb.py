@@ -4,6 +4,7 @@ import subprocess
 import threading
 import time
 import collections
+import logging
 
 import gdbmi_output_parser
 from gdb_commands import GdbCommandBuilder
@@ -23,7 +24,9 @@ class GdbController(GdbCommandBuilder):
 	def __init__(self, gdb_instance, output_handler):
 		self.gdb = gdb_instance
 		self.output_handler = output_handler
-		
+	
+		self.log = logging.getLogger("gdb")
+	
 		self.output_hist = []
 		self.target_hist = []
 	
@@ -42,7 +45,7 @@ class GdbController(GdbCommandBuilder):
 		self.gdb_error_thread.start()
 	
 	def _send(self, command, token = None):
-		print("SENDING[%s]: %s" % (str(token), command))
+		self.log.debug("SENDING[%s]: %s" % (str(token), command))
 		self.gdb.gdbin.write(str(token))
 		self.gdb.gdbin.write(command.strip())
 		self.gdb.gdbin.write("\n")
@@ -51,27 +54,27 @@ class GdbController(GdbCommandBuilder):
 		while True:
 			line = stream.readline()
 			if line == '': break
-			print("GDB says: " + line)
+			self.log.debug("GDB says: %s" % line)
 			self.output_hist.append(line)
 
 			self.gdbmi_output_parser.parseString(line, parseAll=True)
 		
-		print("GDB: Finished")
+		self.log.debug("GDB: Finished")
 	
 	def _gdb_error_thread(self, stream):
 		while True:
 			line = stream.readline()
 			if line == '': break
-			print("GDB error: " + line)
-		print("(GDB stderr : closes)")
+			self.log.debug("GDB error: %s" % line)
+		self.log.debug("(GDB stderr : closes)")
 	
 	def _target_output_thread(self, stream):
 		while True:
 			line = stream.readline()
 			if line == '': break
-			print("TARGET says: " + line)
+			self.log.debug("TARGET says: %s" % line)
 			self.target_hist.append(line)
-		print("(TARGET stdout : closes)")
+		self.log.debug("(TARGET stdout : closes)")
 
 class GdbSession(object):
 
@@ -81,7 +84,7 @@ class GdbSession(object):
 			self.next_token = 1000001
 			# MUST come last
 			GdbController.__init__(self, session.gdb, session)
-	
+
 		def _send(self, command, token = None, on_response = None):
 			if token is None:
 				token = self.next_token
@@ -93,7 +96,9 @@ class GdbSession(object):
 	
 	def __init__(self, gdbinst):
 		self.gdb = gdbinst
+		self.log = logging.getLogger("gdb")
 		self.controller = self.MyGdbController(self)
+		
 		self._file = None
 
 		self._response_handlers = {}
@@ -124,22 +129,22 @@ class GdbSession(object):
 	def _handle_results(self, token, resultClass, results):
 		self.LAST_RESULT = results
 		if resultClass == 'error':
-			print "ERROR ENCOUNTERED: ", results
+			self.log.debug("ERROR ENCOUNTERED: %s" % repr(results))
 			if self._response_handlers.has_key(token):
-				print "CANCELLING HANDLER FOR ", token
+				self.log.debug("CANCELLING HANDLER FOR %s" % repr(token))
 				self._response_handlers.pop(token)
 		else:
 			# call custom handler if any
-			print "CHECK for token: ", token	
+			self.log.debug("CHECK for token: %s" % repr(token))
 			if self._response_handlers.has_key(token):
-				print "TOKEN FOUND: ", repr(token)
+				self.log.debug("TOKEN FOUND: %s" % repr(token))
 				handler = self._response_handlers[token]
 				more = handler(results)
 				if not more:
 					self._response_handlers.pop(token)
 				return True
 			else:
-				print "TOKEN NOT FOUND: ", repr(token)
+				self.log.debug("TOKEN NOT FOUND: %s" % repr(token))
 				return False
 			
 			# Event based handlers
@@ -174,13 +179,13 @@ class GdbSession(object):
 		self._handle_results(token, resultClass, results)
 	#
 	def onGdbOutput(self, string):
-		print ">>> GDB OUTPUT >>> ", string
+		self.log.debug(">>> GDB OUTPUT >>> %s " % string)
 	#
 	def onGdbErr(self, string):
-		print ">>>! GDB ERR ! >>> ", string
+		self.log.debug(">>> GDB ERR >>> %s" % string)
 	#
 	def onTargetOutput(self, string):
-		print ">>> TARGET OUTPUT >>> ", string
+		self.log.debug(">>> TARGET OUTPUT >>> %s" % string)
 
 	# ========== MAIN INTERFACE ==========
 	def file(self, filename):
