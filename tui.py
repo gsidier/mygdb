@@ -76,7 +76,7 @@ class CommandInput(Controller):
 		self.app = gdbtui
 		self.win = win
 	
-	def onInputCommand(self):
+	def onStartCommandInput(self):
 		curses.echo()
 		cmd = self.win.getstr()
 		curses.noecho()
@@ -93,6 +93,13 @@ class TopLevelKeyboardInput(Controller):
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
 		self.win = win
+		self.kb_poll_thread = threading.Thread(target = self._poll)
+		self.kb_poll_thread.setDaemon(True)
+		self.kb_poll_thread.start()
+
+	def _poll(self):
+		while True:
+			ch = self.win.getch()
 
 class PyGdbTui(object):
 
@@ -104,6 +111,6 @@ class PyGdbTui(object):
 		self.topwin.keypad(1)
 	
 		# Events
-		onInputCommand = pygdb.EventSlot()
-			
+		onStartCommandInput = pygdb.EventSlot()
+		
 

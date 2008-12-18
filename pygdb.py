@@ -2,6 +2,8 @@ import os
 import pty
 import subprocess
 import threading
+import time
+import collections
 
 import gdbmi_output_parser
 from gdb_commands import GdbCommandBuilder
@@ -85,6 +87,33 @@ class EventSlot(object):
 		print "BROADCASTING: %s, %s" % (args, kwargs)
 		for listener in self.listeners:
 			listener(*args, **kwargs)
+
+def EventQueue(object):
+	def __init__(self, handler = None, vsync = 1e-2):
+		self.queue = collections.deque()
+		self.vsync = vsync
+		if handler = None:
+			self.handler = lambda *args, **kwargs: None
+		else
+			self.handler = handler
+		
+				
+	# Override or pass in ctor
+	def _handle(self, *args, **kwargs):
+		return self.handler(*args, **kwargs)
+	
+	def __call__(self, *args, **kwargs):
+		"""
+		Schedule the event for handling by the handler thread.
+		"""
+		self.queue.append((args, kwargs))
+	
+	def run(self):
+		while True:
+			while len(self.queue > 0):
+				args, kwargs = self.queue.popleft()
+				self._handle(*args, **kwargs)
+			time.sleep(self.vsync)
 
 class GdbSession(object):
 
