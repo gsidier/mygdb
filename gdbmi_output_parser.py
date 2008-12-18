@@ -28,6 +28,8 @@ class struct(object):
 		self.__dict__.update(dict(dikt))
 	def __repr__(self):
 		return "struct(%s)" % repr(self._data)
+	def __getitem__(self, i):
+		return self._data[i]
 
 def Struct(p):
 	return p.setParseAction(lambda s,loc,tok: struct(tok))

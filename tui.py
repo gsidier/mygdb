@@ -18,7 +18,9 @@ class SourceFileView(View):
 
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
-		self.win = win
+		self.win = win	
+		self.log = logging.getLogger("gdb")
+		
 		maxy, maxx = self.win.getmaxyx()
 		self.client_area = win.subwin(maxy-2, maxx-2, 1, 1)
 		self.top_line = 1
@@ -27,6 +29,7 @@ class SourceFileView(View):
 		self.src_line_data = []
 
 		self.dirty = True
+		self.draw()
 
 		self.app.sess.onProcessedResponse.subscribe(self.onProcessedResponse)
 		self.app.sess.onBreakpointSet.subscribe(self.onBreakpointSet)
@@ -42,6 +45,7 @@ class SourceFileView(View):
 		startline = self.src_line if self.src_line is not None else 0
 		endline = startline + maxy
 		maxndigits = len(str(len(self.src_line_data)))
+		self.log.debug("SourceFileView : size (%d, %d) - startline %d - endline %d" % (maxy, maxx, startline, endline))
 		visible_lines = self.src_line_data[startline:endline]
 		for i in xrange(len(visible_lines)):
 			line = visible_lines[i]
@@ -53,27 +57,35 @@ class SourceFileView(View):
 			linedata = [' '] * maxx
 			linedata[:maxndigits] = str(lineno)
 			linedata[maxndigits+1:] = line
-			window.addnstr(i, 0, linedata, maxx)
+			self.log.debug("SRC: %s" % line)
+			linedata = ''.join(linedata)
+			self.win.addnstr(i, 0, linedata, maxx)
 
 	def update_src_file(self, path):
 		if self.src_file != path:
 			self.dirty = True
 			self.src_file = path
 			f = file(self.src_file, 'r')
-			self.src_ine_data = f.read_lines()
+			self.src_line_data = f.readlines()
 			f.close()
+		self.draw()
+		self.win.refresh()
 
 	# Events 
 	def onProcessedResponse(self, session):
-		if dirty:
-			draw()
-		dirty = False
+		if self.dirty:
+			self.draw()
+			self.win.refresh()
+		self.dirty = False
 	
 	def onBreakpointSet(self, session, breakpoint_desc):
-		dirty = True		
+		log.debug("EVENT : SourceFileView << onBreakPointSet")
+		self.dirty = True		
 
 	def onFrameChange(self, session, frame):
-		self.update_src_file(frame.fullname)
+		log.debug("EVENT : SourceFileView << onFrameChange")
+		self.update_src_file(frame.file)
+		self.draw()
 
 class CommandInput(Controller):
 	def __init__(self, gdbtui, win):

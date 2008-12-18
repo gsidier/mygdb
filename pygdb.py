@@ -145,8 +145,9 @@ class GdbSession(object):
 				return True
 			else:
 				self.log.debug("TOKEN NOT FOUND: %s" % repr(token))
-				return False
-			
+		
+			self.log.debug("RESULTS = %s", results)
+	
 			# Event based handlers
 			if hasattr(results, 'thread-id'):
 				self._update_thread_id(results['thread-id'])
@@ -159,10 +160,10 @@ class GdbSession(object):
 		threadid = int(threadid)
 		if threadid != self.threadid:
 			self.threadid = threadid
-			self.onThreadSwitch(self, self.threadid)
+			self.onThreadSwitch.broadcast(self, self.threadid)
 
 	def _update_frame(self, frame):
-		self.onFrameChange(self, frame)
+		self.onFrameChange.broadcast(self, frame)
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
