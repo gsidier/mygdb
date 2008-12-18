@@ -1,6 +1,8 @@
 import pygdb
+from event import EventSlot, EventQueue
 
 import curses
+from curses.wrapper import wrapper
 
 class View(object):
 
@@ -97,9 +99,42 @@ class TopLevelKeyboardInput(Controller):
 		self.kb_poll_thread.setDaemon(True)
 		self.kb_poll_thread.start()
 
+	ACTIONS = {
+		'R': lambda: self.app.commandHandler.onRun(),
+		'C': lambda: self.app.commandHandler.onContinue(),
+		'n': lambda: self.app.commandHandler.onNext(),
+		's': lambda: self.app.commandHandler.onStep(),
+		'b': lambda: self.app.commandHandler.onBreak(),
+		'q': lambda: self.app.commandHandler.onQuit()	
+	}
+
 	def _poll(self):
 		while True:
-			ch = self.win.getch()
+			c = self.win.getkey()
+			if self.ACTIONS.has_key(c):
+				self.ACTIONS[c]()	
+
+class CommandHandler(object):
+	def __init__(self, gdb):
+		self.commandQueue = EventQueue()
+		self.onRun = self.commandQueue.schedule_handler(self._onRun)
+		self.onContinue = self.commandQueue.schedule_handler(self._onContinue)
+		self.onNext = self.commandQueue.schedule_handler(self._onNext)
+		self.onStep = self.commandQueue.schedule_handler(self._onStep)
+		self.onBreak = self.commandQueue.schedule_handler(self._onBreak)
+
+	def _onRun(self):
+		gdb.run()
+	def _onContinue(self):
+		gdb.cont()
+	def _onStep(self):
+		gdb.step()
+	def _onNext(self):
+		gdb.next()
+	def _onBreak(self):
+		gdb.setbreak(loc='main')
+	def _onQuit(self):
+		self.commandQueue.process = False
 
 class PyGdbTui(object):
 
@@ -110,7 +145,18 @@ class PyGdbTui(object):
 		curses.raw()
 		self.topwin.keypad(1)
 	
-		# Events
-		onStartCommandInput = pygdb.EventSlot()
+		# Command handler
+		self.commandHandler = CommandHandler(self.gdb)
 		
+		# Events
+		self.onStartCommandInput = EventSlot()		
+
+if __name__ == '__main__':
+	
+	def run(win):
+		gdb = pygdb.GdbMI()
+		app = PyGdbTui(gdb, win)
+		app.commandHandler.commandQueue.run()
+
+	wrapper(run)
 
