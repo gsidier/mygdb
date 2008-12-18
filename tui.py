@@ -3,6 +3,8 @@ from event import EventSlot, EventQueue
 
 import curses
 from curses.wrapper import wrapper
+import threading
+import logging
 
 class View(object):
 
@@ -17,7 +19,7 @@ class SourceFileView(View):
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
 		self.win = win
-		maxx, maxy = self.win.getmaxyx()
+		maxy, maxx = self.win.getmaxyx()
 		self.client_area = win.subwin(maxy-2, maxx-2, 1, 1)
 		self.top_line = 1
 		self.src_file = None
@@ -26,9 +28,9 @@ class SourceFileView(View):
 
 		self.dirty = True
 
-		self.app.onProcessedResponse.subscribe(self.onProcessedResponse)
-		self.app.onBreakpointSet.subscribe(self.onBreakpointSet)
-		self.app.onFrameChange.subscribe(self.onFrameChange)
+		self.app.sess.onProcessedResponse.subscribe(self.onProcessedResponse)
+		self.app.sess.onBreakpointSet.subscribe(self.onBreakpointSet)
+		self.app.sess.onFrameChange.subscribe(self.onFrameChange)
 		
 	def __del__(self):
 		pass
@@ -62,7 +64,7 @@ class SourceFileView(View):
 			f.close()
 
 	# Events 
-	def onProcessResponse(self, session):
+	def onProcessedResponse(self, session):
 		if dirty:
 			draw()
 		dirty = False
@@ -100,39 +102,41 @@ class TopLevelKeyboardInput(Controller):
 		self.kb_poll_thread.start()
 
 	ACTIONS = {
-		'R': lambda: self.app.commandHandler.onRun(),
-		'C': lambda: self.app.commandHandler.onContinue(),
-		'n': lambda: self.app.commandHandler.onNext(),
-		's': lambda: self.app.commandHandler.onStep(),
-		'b': lambda: self.app.commandHandler.onBreak(),
-		'q': lambda: self.app.commandHandler.onQuit()	
+		'R': lambda self: self.app.commandHandler.onRun(),
+		'C': lambda self: self.app.commandHandler.onContinue(),
+		'n': lambda self: self.app.commandHandler.onNext(),
+		's': lambda self: self.app.commandHandler.onStep(),
+		'b': lambda self: self.app.commandHandler.onBreak(),
+		'q': lambda self: self.app.commandHandler.onQuit()	
 	}
 
 	def _poll(self):
 		while True:
 			c = self.win.getkey()
 			if self.ACTIONS.has_key(c):
-				self.ACTIONS[c]()	
+				self.ACTIONS[c](self)
 
 class CommandHandler(object):
 	def __init__(self, gdb):
+		self.gdb = gdb
 		self.commandQueue = EventQueue()
 		self.onRun = self.commandQueue.schedule_handler(self._onRun)
 		self.onContinue = self.commandQueue.schedule_handler(self._onContinue)
 		self.onNext = self.commandQueue.schedule_handler(self._onNext)
 		self.onStep = self.commandQueue.schedule_handler(self._onStep)
 		self.onBreak = self.commandQueue.schedule_handler(self._onBreak)
+		self.onQuit = self.commandQueue.schedule_handler(self._onQuit)
 
 	def _onRun(self):
-		gdb.run()
+		self.gdb.run()
 	def _onContinue(self):
-		gdb.cont()
+		self.gdb.cont()
 	def _onStep(self):
-		gdb.step()
+		self.gdb.step()
 	def _onNext(self):
-		gdb.next()
+		self.gdb.next()
 	def _onBreak(self):
-		gdb.setbreak(loc='main')
+		self.gdb.setbreak(loc='main')
 	def _onQuit(self):
 		self.commandQueue.process = False
 
@@ -146,17 +150,30 @@ class PyGdbTui(object):
 		self.topwin.keypad(1)
 	
 		# Command handler
-		self.commandHandler = CommandHandler(self.gdb)
+		self.commandHandler = CommandHandler(self.sess)
 		
 		# Events
-		self.onStartCommandInput = EventSlot()		
+		self.onStartCommandInput = EventSlot()
+
+		# Views
+		self.src_view = SourceFileView(self, self.topwin)
+
+		# Input
+		self.kb_input = TopLevelKeyboardInput(self, self.topwin)
 
 if __name__ == '__main__':
 	
 	def run(win):
 		gdb = pygdb.GdbMI()
 		app = PyGdbTui(gdb, win)
+		#
+		app.sess.file('hello')
+		#
 		app.commandHandler.commandQueue.run()
+
+	log = logging.getLogger("gdb")
+	log.addHandler(logging.FileHandler("session.log"))
+	log.setLevel(logging.DEBUG)
 
 	wrapper(run)
 
