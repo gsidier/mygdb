@@ -5,6 +5,7 @@ import curses
 from curses.wrapper import wrapper
 import threading
 import logging
+import time
 
 class View(object):
 
@@ -116,7 +117,7 @@ class CommandPanel(View):
 		
 	def input(self):
 		curses.echo()
-		cmd = self.win.getstr()
+		cmd = self.app.kb_input.get_focus(lambda: self.win.getstr())
 		curses.noecho()
 		return cmd
 	
@@ -127,6 +128,7 @@ class TopLevelKeyboardInput(Controller):
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
 		self.win = win
+		self._process = True
 		self.kb_poll_thread = threading.Thread(target = self._poll)
 		self.kb_poll_thread.setDaemon(True)
 		self.kb_poll_thread.start()
@@ -143,9 +145,22 @@ class TopLevelKeyboardInput(Controller):
 
 	def _poll(self):
 		while True:
-			c = self.win.getkey()
-			if self.ACTIONS.has_key(c):
-				self.ACTIONS[c](self)
+			if self._process:
+				curses.halfdelay(2)
+				try:
+					c = self.win.getkey()
+					if self.ACTIONS.has_key(c):
+						self.ACTIONS[c](self)
+				except:
+					pass
+			else:
+				time.sleep(.2)
+
+	def get_focus(self, function):
+		self._process = False
+		res = function()
+		self._process = True
+		return res
 
 class CommandHandler(object):
 	def __init__(self, gdb, commandPanel):
