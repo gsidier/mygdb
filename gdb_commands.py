@@ -86,8 +86,26 @@ class GdbCommandBuilder(object):
 		return self._send("-var-delete %s" % name, token, *args, **kwargs)
 	def var_set_format(self, name, format, token = None, *args, **kwargs):
 		return self._send("-var-set-format %s %s" % (name, format), token, *args, **kwargs)
-	def var_show_format(self, name, token = None, *args, **kwargs)
+	def var_show_format(self, name, token = None, *args, **kwargs):
 		return self._send("-var-show-format %s" % name, token, *args, **kwargs)
+	def var_num_children(self, name, token = None, *args, **kwargs):
+		return self._send("-var-info-num-children %s" % name, token, *args, **kwargs)
+	def var_list_children(self, name, token = None, *args, **kwargs):
+		return self._send("-var-list-children %s" % name, token, *args, **kwargs)
+	def var_type(self, name, token = None, *args, **kwargs):
+		return self._send("-var-info-type %s" % name, token, *args, **kwargs)
+	def var_path_expr(self, name, token = None, *args, **kwargs):
+		return self._send("-var-info-path-expression %s" % name, token, *args, **kwargs)
+	def var_attributes(self, name, token = None, *args, **kwargs):
+		return self._send("-var-show-attributes %s" % name, token, *args, **kwargs)
+	def var_eval(self, name, token = None, *args, **kwargs):
+		return self._send("-var-evaluate-expression %s" % name, token, *args, **kwargs)
+	def var_assign(self, name, expr, token = None, *args, **kwargs):
+		return self._send("-var-assign %s %s" % (name, expr), token, *args, **kwargs)
+	def var_update(self, name, print_values = "--all-values", *args, **kwargs):
+		return self._send("-var-update %s %s" % (print_values, name), token, *args, **kwargs)
+	def var_set_frozen(self, name, flag = 1, *args, **kwargs):
+		return self._send("-var-set-frozen %s %s" % (name, flag), token, *args, **kwargs)	
 	# Data Manipulation [TODO]
 	# Tracepoint Commands [TODO]
 	# Symbol Query Commands [TODO]
