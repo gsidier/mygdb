@@ -188,6 +188,11 @@ class GdbSession(object):
 	def onTargetOutput(self, string):
 		self.log.debug(">>> TARGET OUTPUT >>> %s" % string)
 
+	# ========== SCRIPTING INTERFACE ==========
+
+	def runCommand(self, cmd):
+		eval(cmd, { 'gdb': self, 'b': self.setbreak })
+
 	# ========== MAIN INTERFACE ==========
 	def file(self, filename):
 		def on_response(response):

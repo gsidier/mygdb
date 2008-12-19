@@ -15,7 +15,6 @@ class EventSlot(object):
 		for listener in self.listeners:
 			listener(*args, **kwargs)
 
-
 class EventQueue(object):
 	def __init__(self, vsync = 1e-2):
 		self.queue = collections.deque()
@@ -30,7 +29,7 @@ class EventQueue(object):
 	def run(self):
 		while self.process:
 			while self.process and len(self.queue) > 0:
-				handler = self.queue.popleft()
-				handler()
+				thunk = self.queue.popleft()
+				thunk()
 			time.sleep(self.vsync)
 

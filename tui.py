@@ -109,21 +109,17 @@ class SourceFileView(View):
 		else:
 			self.src_line = None
 
-class CommandInput(Controller):
-	def __init__(self, gdbtui, win):
-		self.app = gdbtui
-		self.win = win
-	
-	def onStartCommandInput(self):
-		curses.echo()
-		cmd = self.win.getstr()
-		curses.noecho()
-
 class CommandPanel(View):
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
 		self.win = win
 		
+	def input(self):
+		curses.echo()
+		cmd = self.win.getstr()
+		curses.noecho()
+		return cmd
+	
 	def draw(self):
 		self.win.clear()
 
@@ -141,7 +137,8 @@ class TopLevelKeyboardInput(Controller):
 		'n': lambda self: self.app.commandHandler.onNext(),
 		's': lambda self: self.app.commandHandler.onStep(),
 		'b': lambda self: self.app.commandHandler.onBreak(),
-		'q': lambda self: self.app.commandHandler.onQuit()	
+		'q': lambda self: self.app.commandHandler.onQuit(),
+		':': lambda self: self.app.commandHandler.onStartInput()
 	}
 
 	def _poll(self):
@@ -151,8 +148,9 @@ class TopLevelKeyboardInput(Controller):
 				self.ACTIONS[c](self)
 
 class CommandHandler(object):
-	def __init__(self, gdb):
+	def __init__(self, gdb, commandPanel):
 		self.gdb = gdb
+		self.commandPanel = commandPanel
 		self.commandQueue = EventQueue(vsync = 1e-3)
 		self.onRun = self.commandQueue.schedule_handler(self._onRun)
 		self.onContinue = self.commandQueue.schedule_handler(self._onContinue)
@@ -160,6 +158,7 @@ class CommandHandler(object):
 		self.onStep = self.commandQueue.schedule_handler(self._onStep)
 		self.onBreak = self.commandQueue.schedule_handler(self._onBreak)
 		self.onQuit = self.commandQueue.schedule_handler(self._onQuit)
+		self.onStartInput = self.commandQueue.schedule_handler(self._onStartInput)
 
 	def _onRun(self):
 		self.gdb.run()
@@ -173,6 +172,9 @@ class CommandHandler(object):
 		self.gdb.setbreak(loc='main')
 	def _onQuit(self):
 		self.commandQueue.process = False
+	def _onStartInput(self):
+		cmd = self.commandPanel.input()
+		self.gdb.runCommand(cmd)
 
 class PyGdbTui(TopLevelView):
 
@@ -184,8 +186,15 @@ class PyGdbTui(TopLevelView):
 		curses.raw()
 		self.topwin.keypad(1)
 	
+		# Views
+		maxy, maxx = self.topwin.getmaxyx()
+		src_view_win = self.topwin.subwin(maxy-1, maxx, 0, 0)
+		self.src_view = SourceFileView(self, src_view_win)
+		command_panel_win = self.topwin.subwin(1, maxx, maxy - 1, 0)
+		self.command_panel = CommandPanel(self, command_panel_win)
+
 		# Command handler
-		self.commandHandler = CommandHandler(self.sess)
+		self.commandHandler = CommandHandler(self.sess, self.command_panel)
 		
 		# Events
 		self.onStartCommandInput = EventSlot()
@@ -193,9 +202,6 @@ class PyGdbTui(TopLevelView):
 		# Event Handlers
 		self.sess.onProcessedResponse.subscribe(self.onGdbProcessedResponse)
 		self.scheduled_onGdbProcessedResponse = self.commandHandler.commandQueue.schedule_handler(self._onGdbProcessedResponse)
-
-		# Views
-		self.src_view = SourceFileView(self, self.topwin)
 
 		# Input
 		self.kb_input = TopLevelKeyboardInput(self, self.topwin)
