@@ -1,11 +1,14 @@
 import pygdb
 from event import EventSlot, EventQueue
+import piped_event
 
+import os
 import curses
 from curses.wrapper import wrapper
 import threading
 import logging
 import time
+import subprocess
 
 class View(object):
 
@@ -95,11 +98,11 @@ class SourceFileView(View):
 			self.src_line_data = f.readlines()
 			f.close()
 	
-	def onBreakpointSet(self, session, breakpoint_desc):
+	def onBreakpointSet(self, breakpoint_desc):
 		log.debug("EVENT : SourceFileView << onBreakPointSet")
 		self.dirty = True
 
-	def onFrameChange(self, session, frame):
+	def onFrameChange(self, frame):
 		self.dirty = True
 		log.debug("EVENT : SourceFileView << onFrameChange")
 		if hasattr(frame, 'file'):
@@ -221,7 +224,7 @@ class PyGdbTui(TopLevelView):
 		# Input
 		self.kb_input = TopLevelKeyboardInput(self, self.topwin)
 
-	def onGdbProcessedResponse(self, sess):
+	def onGdbProcessedResponse(self):
 		self.scheduled_onGdbProcessedResponse()
 	def _onGdbProcessedResponse(self):
 		self.log.debug("### REFRESH ###")
@@ -231,17 +234,32 @@ class PyGdbTui(TopLevelView):
 
 if __name__ == '__main__':
 	
+	log = logging.getLogger("gdb")
+	log.addHandler(logging.FileHandler("session.log"))
+	log.setLevel(logging.DEBUG)
+
+
 	def run(win):
 		gdb = pygdb.GdbMI()
 		app = PyGdbTui(gdb, win)
 		#
 		app.sess.file('hello')
 		#
-		app.commandHandler.commandQueue.run()
+		fifo_path = 'fifo1'
+		log.debug("MAKING FIFO")
+		os.mkfifo(fifo_path)
 
-	log = logging.getLogger("gdb")
-	log.addHandler(logging.FileHandler("session.log"))
-	log.setLevel(logging.DEBUG)
+		log.debug("SPAWNING OBS")
+		xterm = subprocess.Popen(["xterm", "+hold", "-e", "python", "obstest.py", fifo_path])
+		log.debug("SPAWNED OBS")
+		log.debug("CREATING FIFO")
+		fifo = file(fifo_path, 'w')
+		log.debug("CREATED FIFO")
+
+		stub = piped_event.Stub(fifo)
+		stub.subscribe(app.sess.onProcessedResponse, 'onProcessedResponse')
+		#
+		app.commandHandler.commandQueue.run()
 
 	wrapper(run)
 

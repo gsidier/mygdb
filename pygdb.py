@@ -107,19 +107,19 @@ class GdbSession(object):
 		self.threadid = None
 		
 		# Events
-		self.onError = EventSlot() # GdbSession, token, msg
-		self.onFileChanged = EventSlot() # GdbSession, filename
-		self.onBreakpointSet = EventSlot() # GdbSession, breakpoint_desc
-		self.onThreadSwitch = EventSlot() # GdbSession, threadid
-		self.onFrameChange = EventSlot() # GdbSession, frameinfo
-		self.onProcessedResponse = EventSlot() # GdbSession
+		self.onError = EventSlot() # token, msg
+		self.onFileChanged = EventSlot() # filename
+		self.onBreakpointSet = EventSlot() # breakpoint_desc
+		self.onThreadSwitch = EventSlot() # threadid
+		self.onFrameChange = EventSlot() # frameinfo
+		self.onProcessedResponse = EventSlot() # <no args>
 
 	def err_check_response(self, on_response):
 		def on_response_or_err(response):
 			token, status = response[:2]
 			if status == 'error':
 				errmsg = response[2]
-				self.onError.broadcast(self, token, errmsg)
+				self.onError.broadcast(token, errmsg)
 				return False
 			return on_response(response)
 		return on_response_or_err
@@ -154,16 +154,16 @@ class GdbSession(object):
 			if hasattr(results, 'frame'):
 				self._update_frame(results.frame)
 
-			self.onProcessedResponse.broadcast(self)
+			self.onProcessedResponse.broadcast()
 
 	def _update_thread_id(self, threadid):
 		threadid = int(threadid)
 		if threadid != self.threadid:
 			self.threadid = threadid
-			self.onThreadSwitch.broadcast(self, self.threadid)
+			self.onThreadSwitch.broadcast(self.threadid)
 
 	def _update_frame(self, frame):
-		self.onFrameChange.broadcast(self, frame)
+		self.onFrameChange.broadcast(frame)
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
@@ -196,12 +196,12 @@ class GdbSession(object):
 	# ========== MAIN INTERFACE ==========
 	def file(self, filename):
 		def on_response(response):
-			self.onFileChanged.broadcast(self, filename)
+			self.onFileChanged.broadcast(filename)
 		self.controller.file(filename, on_response=on_response)
 	#
 	def setbreak(self, loc=None, cond=None, temp=False, hardware=False, count=None, thread=None, force=False):
 		def on_response(desc):
-			self.onBreakpointSet.broadcast(self, desc)
+			self.onBreakpointSet.broadcast(desc)
 		self.controller.break_insert(loc, cond, temp, hardware, count, force, on_response=on_response)
 	def tbreak(self, loc=None, cond=None, count=None, thread=None, force=False):
 		return self.setbreak(loc=loc, cond=cond, count=count, thread=thread, force=force, temp=True)
