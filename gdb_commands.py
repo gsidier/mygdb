@@ -75,7 +75,19 @@ class GdbCommandBuilder(object):
 		return self._send("-stack-list-locals %d" % (1 if showvals else 0), token, *args, **kwargs)
 	def select_frame(self, frame, token = None, *args, **kwargs):
 		return self._send("-stack-select-frame %d" % frame, token, *args, **kwargs)
-	# Variable Objects [TODO]
+	# Variable Objects [TODO:incomplete]
+	def var_create(self, expr, name = None, frame = None, token = None, *args, **kwargs):
+		if name is None:
+			name = '-'
+		if frame is None:
+			frame = '*'
+		return self._send("-var-create %s %s %s" % (name, frame, expr), token , *args, **kwargs)
+	def var_delete(self, name, token = None, *args, **kwargs):
+		return self._send("-var-delete %s" % name, token, *args, **kwargs)
+	def var_set_format(self, name, format, token = None, *args, **kwargs):
+		return self._send("-var-set-format %s %s" % (name, format), token, *args, **kwargs)
+	def var_show_format(self, name, token = None, *args, **kwargs)
+		return self._send("-var-show-format %s" % name, token, *args, **kwargs)
 	# Data Manipulation [TODO]
 	# Tracepoint Commands [TODO]
 	# Symbol Query Commands [TODO]
