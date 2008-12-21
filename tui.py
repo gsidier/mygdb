@@ -35,13 +35,16 @@ class Controller(object):
 
 class SourceFileView(View):
 
+	TABSTOP = 4
+
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
 		self.win = win	
 		self.log = logging.getLogger("gdb")
 		
 		maxy, maxx = self.win.getmaxyx()
-		self.client_area = win.subwin(maxy-2, maxx-2, 1, 1)
+		self.log.debug("SRC VIEW WIN %d %d" % (maxx, maxy))
+		self.client_area = win.derwin(maxy-2, maxx-2, 1, 1)
 		self.line_off = 0
 		self.src_file = None
 		self.src_line = None # 1-based
@@ -64,8 +67,14 @@ class SourceFileView(View):
 	def draw(self):
 		if self.dirty: 
 			self.win.border()
+			curses.curs_set(0)
 			maxy, maxx = self.client_area.getmaxyx()
 			self.client_area.clear()
+			# if src_line is of the screen then recenter view so that src_line is approx 1/5th down from top of screen
+			if self.src_line is not None:
+				if self.line_off is None or self.src_line < self.line_off + 1 or self.src_line >= self.line_off + 1 + maxy:
+					self.line_off = max(0, self.src_line - 1 - maxy / 5)
+				
 			startoff = self.line_off if self.line_off is not None else 0
 			startline = startoff + 1 # 'offsets' are 0-based, 'lines' are 1-based
 			endoff = startoff + maxy
@@ -73,9 +82,11 @@ class SourceFileView(View):
 			maxndigits = len(str(len(self.src_line_data)))
 			self.log.debug("SourceFileView : size (%d, %d) - startoff %d - endoff %d" % (maxy, maxx, startoff, endoff))
 			visible_lines = self.src_line_data[startoff:endoff]
+			self.log.debug("SRC LINE : %s" % self.src_line)
 			for i in xrange(len(visible_lines)):
+				self.log.debug("Line y =  %d" % i)
 				lineno = i + startline 
-				line = visible_lines[i]
+				line = visible_lines[i].replace('\t', ' ' * self.TABSTOP)
 				if lineno == self.src_line:
 					self.client_area.attron(curses.A_REVERSE)
 					self.client_area.attron(curses.A_BOLD)
@@ -83,10 +94,12 @@ class SourceFileView(View):
 				else:
 					self.client_area.attroff(curses.A_REVERSE)
 					self.client_area.attroff(curses.A_BOLD)
-				linedata = [' '] * maxx
+				linedata = [' '] * (maxndigits + 1)
 				linedata[:maxndigits] = str(lineno)
 				linedata[maxndigits+1:] = line
-				linedata = ''.join(linedata)
+				linedata = ''.join(linedata).strip()
+				linedata = linedata[:maxx]
+				# self.log.debug("Gonna paste str (len %d at %d, %d) '%s'" % (len(linedata), 0, i, linedata))
 				self.client_area.addnstr(i, 0, linedata, maxx)
 		self.dirty = False
 
@@ -143,7 +156,10 @@ class TopLevelKeyboardInput(Controller):
 		's': lambda self: self.app.commandHandler.onStep(),
 		'b': lambda self: self.app.commandHandler.onBreak(),
 		'q': lambda self: self.app.commandHandler.onQuit(),
-		':': lambda self: self.app.commandHandler.onStartInput()
+		':': lambda self: self.app.commandHandler.onStartInput(),
+		'KEY_UP': lambda self: self.app.commandHandler.scrollUp(),
+		'KEY_DOWN': lambda self: self.app.commandHandler.scrollDown(),
+		'KEY_F(1)': lambda self: None
 	}
 
 	def _poll(self):
@@ -152,6 +168,7 @@ class TopLevelKeyboardInput(Controller):
 				curses.halfdelay(2)
 				try:
 					c = self.win.getkey()
+					log.debug("KEY PRESSED : '%s'" % c)
 					if self.ACTIONS.has_key(c):
 						self.ACTIONS[c](self)
 				except:
@@ -177,7 +194,10 @@ class CommandHandler(object):
 		self.onBreak = self.commandQueue.schedule_handler(self._onBreak)
 		self.onQuit = self.commandQueue.schedule_handler(self._onQuit)
 		self.onStartInput = self.commandQueue.schedule_handler(self._onStartInput)
-
+		
+		self.onScrollUp = self.commandQueue.schedule_handler(self._onScrollUp)
+		self.onScrollDown = self.commandQueue.schedule_handler(self._onScrollDown)
+		
 	def _onRun(self):
 		self.gdb.run()
 	def _onContinue(self):
@@ -193,6 +213,11 @@ class CommandHandler(object):
 	def _onStartInput(self):
 		cmd = self.commandPanel.input()
 		self.gdb.runCommand(cmd)
+
+	def _onScrollDown(self):
+		pass
+	def _onScrollUp(self):
+		pass
 
 class PyGdbTui(TopLevelView):
 
