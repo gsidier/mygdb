@@ -132,13 +132,22 @@ class CommandPanel(View):
 		self.win = win
 		
 	def input(self):
+		self.win.clear()
+		curses.curs_set(1)
 		curses.echo()
 		cmd = self.app.kb_input.get_focus(lambda: self.win.getstr())
 		curses.noecho()
+		curses.curs_set(0)
 		return cmd
 	
 	def draw(self):
 		self.win.clear()
+
+	def disperr(self, errmsg):
+		self.win.clear()
+		maxy, maxx = self.win.getmaxyx()
+		self.win.addnstr(0, 0, errmsg, max(len(errmsg), maxx))
+		self.win.refresh()
 
 class TopLevelKeyboardInput(Controller):
 	def __init__(self, gdbtui, win):
@@ -212,8 +221,10 @@ class CommandHandler(object):
 		self.commandQueue.process = False
 	def _onStartInput(self):
 		cmd = self.commandPanel.input()
-		self.gdb.runCommand(cmd)
-
+		try:
+			res = self.gdb.runCommand(cmd)
+		except Exception, e:
+			self.commandPanel.disperr(e.message)
 	def _onScrollDown(self):
 		pass
 	def _onScrollUp(self):

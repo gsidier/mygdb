@@ -191,7 +191,7 @@ class GdbSession(object):
 	# ========== SCRIPTING INTERFACE ==========
 
 	def runCommand(self, cmd):
-		eval(cmd, { 'gdb': self, 'b': self.setbreak })
+		eval(cmd, { 'gdb': self.controller, 'b': self.setbreak })
 
 	# ========== MAIN INTERFACE ==========
 	def file(self, filename):
