@@ -34,16 +34,32 @@ class struct(object):
 def Struct(p):
 	return p.setParseAction(lambda s,loc,tok: struct(tok))
 
+def wrapper(object):
+	def __init__(self, value):
+		self.value = value
+	def __repr__(self):
+		return "wrapper(%s)" % repr(self.value)
+
+def Wrap(p):
+	return p.setParseAction(lambda s,loc,tok: wrapper(tok))
+
+def List(p):
+	return p.setParseAction(lambda s,loc,tok: wrapper(list(tok)))
+
+def Tuple(p):
+	return p.setParseAction(lambda s,loc,tok: wrapper(tuple(tok)))
+
 c_string = dblQuotedString.copy().setParseAction(lambda s,loc,toks: eval(toks[0])) 
 const = c_string
 string = Word("-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 variable = string
 value = Forward()
 result = Group(variable + EQ + value)
+result_list = delimitedList(Tuple(result))
 results = Struct(Dict(delimitedList(result)))
 values = delimitedList(value)
 tuple_ = (LCURLY + Optional(results) + RCURLY)
-list_ = (LSQUARE + Optional(values | results) + RSQUARE)
+list_ = List(LSQUARE + Optional(values | result_list) + RSQUARE)
 value << (c_string | tuple_ | list_)
 async_class = string
 async_output = async_class + Optional(COMMA + results)
