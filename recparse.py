@@ -65,7 +65,11 @@ class Parser(object):
 		raise NotImplementedError
 
 	def set_result(self, func):
-		self.result_func = func
+		if self.result_func is None:
+			self.result_func = func
+		else:
+			prev_func = self.result_func
+			self.result_func = lambda tok,val: func(tok, prev_func(tok, val))
 		return self
 
 	def ignore(self):
@@ -184,7 +188,10 @@ class Seq(Parser):
 		return True, ParseResult(restoks, res)
 
 	def __add__(self, other):
-		return Seq(*(self.items + (other,)))
+		if self.result_func is not None:
+			return Parser.__add__(self, other)
+		else:
+			return Seq(*(self.items + (other,)))
 
 class Repeat(Parser):
 	def __init__(self, inner, min = None, max = None):
@@ -257,6 +264,9 @@ class Lexer(object):
 				raise "Syntax Error"
 		return TokenStream(gen())
 
+def DelimitedList(parser, sep):
+	return (parser + (sep + parser) * (0,)).set_result(lambda tok,val: [val[0]] + [ val[1][i][1] for i in xrange(len(val[1])) ])
+
 if __name__ == '__main__':
 
 	lex = Lexer(
@@ -267,10 +277,11 @@ if __name__ == '__main__':
 		LCURLY     = Literal("{"),
 		RCURLY     = Literal("}"),
 		LSQUARE    = Literal("["),
-		RSQUARE    = Literal("]")
+		RSQUARE    = Literal("]"),
+		COMMA      = Literal(",")
 	)
 
-	string = '{x = "13" y = ["1" "2" "foo"] }'
+	string = '{x = "13" , y = ["1"  "2" "foo"] }'
 	chars = TokenStream(iter(string))
 
 	tokens = lex.lex(chars)
@@ -281,14 +292,15 @@ if __name__ == '__main__':
 	value = Forward()
 
 	result      = lex.VAR + lex.EQ + value                                    >= (lambda tok,val: (val[0], val[2]))
-	result_list = result * (1,)
-	results     = result * (0,)                                               >= (lambda tok,val: dict(val))
+	result_list = DelimitedList(result, lex.COMMA)
+	results     = DelimitedList(result, lex.COMMA)                            >= (lambda tok,val: dict(val))
 	values      = value * (1,)
-	tuple       = lex.LCURLY + results + lex.RCURLY                           >= (lambda tok,val: val[1])
+	tuple_      = lex.LCURLY + results + lex.RCURLY                           >= (lambda tok,val: val[1])
 	list_       = lex.LSQUARE + Optional(values | result_list) + lex.RSQUARE  >= (lambda tok,val: val[1])
-	value      << (lex.CSTR | tuple | list_)
+	value      << (lex.CSTR | tuple_ | list_)
 
 	success, result = value.try_parse(tokstream)
 	print success
 	print result.tokens
 	print result.value
+
