@@ -281,6 +281,7 @@ if __name__ == '__main__':
 		#
 		app.sess.file('hello')
 		#
+		"""
 		fifo_path = 'fifo1'
 		log.debug("MAKING FIFO")
 		os.mkfifo(fifo_path)
@@ -294,6 +295,7 @@ if __name__ == '__main__':
 
 		stub = piped_event.Stub(fifo)
 		stub.subscribe(app.sess.onProcessedResponse, 'onProcessedResponse')
+		"""
 		#
 		app.commandHandler.commandQueue.run()
 

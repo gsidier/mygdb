@@ -1,95 +1,79 @@
-from pyparsing import *
+from recparse import *
 
-ParserElement.setDefaultWhitespaceChars(" \t")
+lex = Lexer(
+	WHITESPACE = (Literal(' ') | Literal("\t")).ignore(),
+	EQ         = Literal('='),
+	STAR       = Literal('*'),
+	PLUS       = Literal('+'),
+	TILDE      = Literal('~'),
+	AT         = Literal('@'),
+	HAT        = Literal('^'),
+	AMPERSAND  = Literal('&'),
+	LCURLY     = Literal('{'),
+	RCURLY     = Literal('}'),
+	LSQUARE    = Literal('['),
+	RSQUARE    = Literal(']'),
+	COMMA      = Literal(','),
+	CSTR       = (Literal('"') + ExcludeChars('"') * (0,) + Literal('"')).set_result(lambda tok,res: ''.join(res[1])),
+	IDENT      = Word('-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'),
+	TOKEN      = Word('0123456789'),
+	STOP       = Literal('(gdb)'),
+	EOL        = Literal('\n\r') | Literal('\n') | Literal('\r') | Literal('\r\n')
+)
 
-NOTFY_OUT  = Literal("=").suppress()
-EXEC_OUT   = Literal("*").suppress()
-STATUS_OUT = Literal("+").suppress()
-TILDE      = Literal("~").suppress()
-AT         = Literal("@").suppress()
-HAT        = Literal("^").suppress()
-AMPERSAND  = Literal("&").suppress()
-EQ         = Literal("=").suppress()
-COMMA      = Literal(",").suppress()
-LCURLY     = Literal("{").suppress()
-RCURLY     = Literal("}").suppress()
-LSQUARE    = Literal("[").suppress()
-RSQUARE    = Literal("]").suppress()
-DQUOTE     = Literal("\"").suppress()
-STOP       = Literal("(gdb)")
-EOL        = (Literal("\n") | Literal("\n\r") | Literal("\r") | Literal("\r\n")).suppress()
-
-token = Word("0123456789")
-optional_token = Optional(token, default=None)
-
-class struct(object):
-	def __init__(self, dikt):
-		self._data = dict(dikt)
-		self.__dict__.update(dict(dikt))
-	def __repr__(self):
-		return "struct(%s)" % repr(self._data)
-	def __getitem__(self, i):
-		return self._data[i]
-
-def Struct(p):
-	return p.setParseAction(lambda s,loc,tok: struct(tok))
-
-def wrapper(object):
-	def __init__(self, value):
-		self.value = value
-	def __repr__(self):
-		return "wrapper(%s)" % repr(self.value)
-
-def Wrap(p):
-	return p.setParseAction(lambda s,loc,tok: wrapper(tok))
-
-def List(p):
-	return p.setParseAction(lambda s,loc,tok: wrapper(list(tok)))
-
-def Tuple(p):
-	return p.setParseAction(lambda s,loc,tok: wrapper(tuple(tok)))
-
-c_string = dblQuotedString.copy().setParseAction(lambda s,loc,toks: eval(toks[0])) 
-const = c_string
-string = Word("-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-variable = string
 value = Forward()
-result = Group(variable + EQ + value)
-result_list = delimitedList(Tuple(result))
-results = Struct(Dict(delimitedList(result)))
-values = delimitedList(value)
-tuple_ = (LCURLY + Optional(results) + RCURLY)
-list_ = List(LSQUARE + Optional(values | result_list) + RSQUARE)
-value << (c_string | tuple_ | list_)
-async_class = string
-async_output = async_class + Optional(COMMA + results)
-result_class = string
 
-# output =  ZeroOrMore(out_of_band_record) + Optional(result_record) + STOP + EOL
+result      = lex.IDENT + lex.EQ + value                                  >= (lambda tok,val: (val[0], val[2]))
+result_list = DelimitedList(result, lex.COMMA)
+results     = DelimitedList(result, lex.COMMA)                            >= (lambda tok,val: dict(val))
+values      = DelimitedList(value, lex.COMMA)
+tuple_      = lex.LCURLY + results + lex.RCURLY                           >= (lambda tok,val: val[1])
+list_       = lex.LSQUARE + Optional(values | result_list) + lex.RSQUARE  >= (lambda tok,val: val[1])
+value      << (lex.CSTR | tuple_ | list_)
+async_class = lex.IDENT
+optional_results = Optional((lex.COMMA + results)[1])
+async_output = async_class + optional_results
+result_class = lex.IDENT
 
-# Output Visitor:
-# Should support the following methods:
-#
-# 	onExecAsyncOutput(token, asyncClass, results=None)
-# 	onNotifyAsyncOutput(token, asyncClass, results=None)
-# 	onStatusAsyncOutput(token, asyncClass, results=None)
-# 	onResultRecord(token, resultClass, results=None)
-# 	onGdbOutput(string)
-#	onGdbErr(string)
-#	onTargetOutput(string)
-# 
+gdbout      = lambda V: (lex.TILDE + lex.CSTR)[1]     >= (lambda tok,val: V.onGdbOutput(val))
+targetout   = lambda V: (lex.AT + lex.CSTR)[1]        >= (lambda tok,val: V.onTargetOutput(val))
+gdberr      = lambda V: (lex.AMPERSAND + lex.CSTR)[1] >= (lambda tok,val: V.onGdbErr(val))
 
-gdbout_stream_output  = lambda V: (TILDE + c_string).setParseAction(lambda s, loc, toks: V.onGdbOutput(toks[0]))
-target_stream_output  = lambda V: (AT + c_string).setParseAction(lambda s, loc, toks: V.onTargetOutput(toks[0]))
-gdberr_stream_output  = lambda V: (AMPERSAND + c_string).setParseAction(lambda s, loc, toks: V.onGdbErr(toks[0]))
+notify_msg  = lambda V: (Optional(lex.TOKEN) + lex.EQ + async_output)    >= (lambda tok,val: V.onNotifyAsyncOutput(val[0], *val[2]))
+exec_msg    = lambda V: (Optional(lex.TOKEN) + lex.STAR + async_output)  >= (lambda tok,val: V.onExecAsyncOutput(val[0], *val[2]))
+status_msg  = lambda V: (Optional(lex.TOKEN) + lex.PLUS + async_output)  >= (lambda tok,val: V.onStatusAsyncOutput(val[0], *val[2]))
 
-notify_async_output   = lambda V: (optional_token + NOTFY_OUT + async_output).setParseAction(lambda s, loc, toks: V.onNotifyAsyncOutput(toks[0], *toks[1:]))
-exec_async_output     = lambda V: (optional_token + EXEC_OUT + async_output).setParseAction(lambda s, loc, toks: V.onExecAsyncOutput(toks[0], *toks[1:]))
-status_async_output   = lambda V: (optional_token + STATUS_OUT + async_output).setParseAction(lambda s, loc, toks: V.onStatusAsyncOutput(toks[0], *toks[1:]))
+result_rec  = lambda V: (Optional(lex.TOKEN) + lex.HAT + result_class + optional_results) >= (lambda tok,val: V.onResultRecord(val[0], val[2], val[3]))
 
-stream_record         = lambda V: gdbout_stream_output(V) | target_stream_output(V) | gdberr_stream_output(V)
-async_record          = lambda V: exec_async_output(V) | notify_async_output(V) | status_async_output(V)
-result_record         = lambda V: (optional_token + HAT + result_class + Optional(COMMA + results)).setParseAction(lambda s, loc, toks: V.onResultRecord(toks[0], *toks[1:]))
-out_of_band_record    = lambda V: (async_record(V) | stream_record(V))
-output                = lambda V: (out_of_band_record(V) | result_record(V) | STOP) + EOL
+stream_rec  = lambda V: (gdbout(V) | targetout(V) | gdberr(V))
+async_rec   = lambda V: (exec_msg(V) | notify_msg(V) | status_msg(V))
+
+gdbmi_output = lambda V: (async_rec(V) | stream_rec(V) | result_rec(V) | lex.STOP) + lex.EOL
+
+if __name__ == '__main__':
+
+	class Visitor(object):
+		def __getattr__(self, name):
+			def handler(*args):
+				print "GOT: %s %s" % (name, repr(args))
+			return handler
+
+	v = Visitor()
+
+	# inputstr = '{x = "13" , y = ["1"  "2" "foo"] }'
+	# inputstr = 'asyncclass , x = { a = "42", pi = "3.14" }, y = "False"'
+	inputstr = '& "Foobar Error!"\n'
+	inputstr = '1000003*stopped,reason="breakpoint-hit",bkptno="1",thread-id="0",frame={addr="0x08048428",func="main",args=[{name="argc",value="1"},{name="argv",value="0xbfbb3cb4"}],file="hello.c",fullname="/home/greg/code/mygdb/hello.c",line="16"}\n'
+	chars = TokenStream(iter(inputstr))
+
+	tokens = lex.lex(chars)
+	toks = list(tokens.unconsumed)
+	print toks
+	tokstream = TokenStream(iter(toks))
+
+	success, result = gdbmi_output(v).try_parse(tokstream)
+	print success
+	if success:
+		print result.tokens
+		print result.value
 

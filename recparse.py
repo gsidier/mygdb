@@ -299,79 +299,12 @@ class Lexer(object):
 				if result.value is not None:
 					yield(tokname, result.value)
 			if not stream.eos():
-				raise "Syntax Error"
+				raise SyntaxError("")
 		return TokenStream(gen())
 
 def DelimitedList(parser, sep):
 	return (parser + (sep + parser) * (0,)).set_result(lambda tok,val: [val[0]] + [ val[1][i][1] for i in xrange(len(val[1])) ])
 
 if __name__ == '__main__':
-
-	lex = Lexer(
-		WHITESPACE = (Literal(' ') | Literal("\t")).ignore(),
-		EQ         = Literal('='),
-		STAR       = Literal('*'),
-		PLUS       = Literal('+'),
-		TILDE      = Literal('~'),
-		AT         = Literal('@'),
-		HAT        = Literal('^'),
-		AMPERSAND  = Literal('&'),
-		LCURLY     = Literal('{'),
-		RCURLY     = Literal('}'),
-		LSQUARE    = Literal('['),
-		RSQUARE    = Literal(']'),
-		COMMA      = Literal(','),
-		CSTR       = (Literal('"') + ExcludeChars('"') * (0,) + Literal('"')).set_result(lambda tok,res: ''.join(res[1])),
-		IDENT      = Word('-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'),
-		TOKEN      = Word('0123456789'),
-		STOP       = Literal('(gdb)'),
-		EOL        = Literal('\n\r') | Literal('\n') | Literal('\r') | Literal('\r\n')
-	)
-
-	value = Forward()
-
-	result      = lex.IDENT + lex.EQ + value                                  >= (lambda tok,val: (val[0], val[2]))
-	result_list = DelimitedList(result, lex.COMMA)
-	results     = DelimitedList(result, lex.COMMA)                            >= (lambda tok,val: dict(val))
-	values      = value * (1,)
-	tuple_      = lex.LCURLY + results + lex.RCURLY                           >= (lambda tok,val: val[1])
-	list_       = lex.LSQUARE + Optional(values | result_list) + lex.RSQUARE  >= (lambda tok,val: val[1])
-	value      << (lex.CSTR | tuple_ | list_)
-	async_class = lex.IDENT
-	optional_results = Optional((lex.COMMA + results)[1])
-	async_output = async_class + optional_results
-	result_class = lex.IDENT
-
-	def echo(*s):
-		print ''.join([str(si) for si in s])
-
-	gdbout      = (lex.TILDE + lex.CSTR)[1]     >= (lambda tok,val: echo("GDB SAYS: ", val))
-	targetout   = (lex.AT + lex.CSTR)[1]        >= (lambda tok,val: echo("TARGET SAYS: ", val))        
-	gdberr      = (lex.AMPERSAND + lex.CSTR)[1] >= (lambda tok,val: echo("GDB ERR: ", val))
-	
-	notify_msg  = (Optional(lex.TOKEN) + lex.EQ + async_output)
-	exec_msg    = (Optional(lex.TOKEN) + lex.STAR + async_output)
-	status_msg  = (Optional(lex.TOKEN) + lex.PLUS + async_output)
-
-	result_rec  = (Optional(lex.TOKEN) + lex.HAT + result_class + optional_results)
-	
-	stream_rec  = (gdbout | targetout | gdberr)
-	async_rec   = (exec_msg | notify_msg | status_msg)
-
-	gdbmi_output   = (async_rec | stream_rec | result_rec | lex.STOP) + lex.EOL
-
-	# inputstr = '{x = "13" , y = ["1"  "2" "foo"] }'
-	# inputstr = 'asyncclass , x = { a = "42", pi = "3.14" }, y = "False"'
-	inputstr = '& "Foobar Error!"\n'
-	chars = TokenStream(iter(inputstr))
-
-	tokens = lex.lex(chars)
-	toks = list(tokens.unconsumed)
-	print toks
-	tokstream = TokenStream(iter(toks))
-
-	success, result = gdbmi_output.try_parse(tokstream)
-	print success
-	print result.tokens
-	print result.value
+	pass
 

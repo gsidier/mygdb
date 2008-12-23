@@ -6,6 +6,7 @@ import time
 import collections
 import logging
 
+import recparse
 import gdbmi_output_parser
 from gdb_commands import GdbCommandBuilder
 from event import EventSlot, EventQueue
@@ -34,7 +35,8 @@ class GdbController(GdbCommandBuilder):
 		self.target_output_thread.setDaemon(True)
 		self.target_output_thread.start()
 
-		self.gdbmi_output_parser = gdbmi_output_parser.output(self.output_handler)
+		self.gdbmi_output_lexer = gdbmi_output_parser.lex
+		self.gdbmi_output_parser = gdbmi_output_parser.gdbmi_output(self.output_handler)
 	
 		self.gdb_output_thread = threading.Thread(target = self._gdb_raw_output_thread, args = [self.gdb.gdbout])
 		self.gdb_output_thread.setDaemon(True)
@@ -57,8 +59,16 @@ class GdbController(GdbCommandBuilder):
 			self.log.debug("GDB says: %s" % line)
 			self.output_hist.append(line)
 
-			self.gdbmi_output_parser.parseString(line, parseAll=True)
-		
+			try:
+				charstream = recparse.TokenStream(iter(line))
+				tokenstream = self.gdbmi_output_lexer.lex(charstream)
+				success, result = self.gdbmi_output_parser.try_parse(tokenstream)
+				if not success:
+					self.log.error("GDBMI parse error on input : %s" % line)
+					continue
+			except SyntaxError, err:
+				self.log.error("GDBMI syntax error : %s" % err.message)
+	
 		self.log.debug("GDB: Finished")
 	
 	def _gdb_error_thread(self, stream):
