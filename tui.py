@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
 import pygdb
 from event import EventSlot, EventQueue
 import piped_event

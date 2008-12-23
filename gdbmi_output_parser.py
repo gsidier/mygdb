@@ -1,5 +1,7 @@
 from recparse import *
 
+# ========== LEXER ==========
+
 lex = Lexer(
 	WHITESPACE = (Literal(' ') | Literal("\t")).ignore(),
 	EQ         = Literal('='),
@@ -21,11 +23,23 @@ lex = Lexer(
 	EOL        = Literal('\n\r') | Literal('\n') | Literal('\r') | Literal('\r\n')
 )
 
+# ========== RESULT STRUCTURES ==========
+class struct(object):
+	def __init__(self, dikt):
+		self._data = dict(dikt)
+		self.__dict__.update(dict(dikt))
+	def __repr__(self):
+		return "struct(%s)" % repr(self._data)
+	def __getitem__(self, i):
+		return self._data[i]
+
+# ========== PARSER ==========
+
 value = Forward()
 
 result      = lex.IDENT + lex.EQ + value                                  >= (lambda tok,val: (val[0], val[2]))
 result_list = DelimitedList(result, lex.COMMA)
-results     = DelimitedList(result, lex.COMMA)                            >= (lambda tok,val: dict(val))
+results     = DelimitedList(result, lex.COMMA)                            >= (lambda tok,val: struct(dict(val)))
 values      = DelimitedList(value, lex.COMMA)
 tuple_      = lex.LCURLY + results + lex.RCURLY                           >= (lambda tok,val: val[1])
 list_       = lex.LSQUARE + Optional(values | result_list) + lex.RSQUARE  >= (lambda tok,val: val[1])
