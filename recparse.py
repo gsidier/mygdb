@@ -72,6 +72,9 @@ class Parser(object):
 		self.result_func = lambda toks, val: None
 		return self
 
+	def __ge__(self, func):
+		return self.set_result(func)
+
 	def __or__(self, other):
 		return Disj(self, other)
 
@@ -206,7 +209,7 @@ class Repeat(Parser):
 		return True, ParseResult(restoks, res)
 
 def Optional(inner):
-	return Repeat(inner, 0, 1)
+	return Repeat(inner, 0, 1).set_result(lambda tok,val: None if len(val) == 0 else val[0])
 
 def ZeroOrMore(inner):
 	return Repeat(inner)
@@ -227,69 +230,65 @@ class Literal(Seq):
 		return success, result	
 
 def Word(string):
-	return CharacterClass(string) * (1,)
+	return (CharacterClass(string) * (1,)).set_result(lambda tok,res: ''.join(res))
 
 class Lexer(object):
 
-	def __init__(self, *tokens):
+	def __init__(self, **tokens):
 		self.tokens = tokens
-
+		def token_matcher(name):
+			return TokenPredicate(lambda tok: tok[0] == name).set_result(lambda tok,val: val[1])
+		for tokname, tokparser in self.tokens.iteritems():
+			match_token = token_matcher(tokname)
+			setattr(self, tokname, match_token)
+		
 	def lex(self, stream):
 		def gen():
-			disj = Disj(*self.tokens)
 			while True:
-				success, result = disj.try_parse(stream)
+				for tokname, tokparser in self.tokens.iteritems():
+					success, result = tokparser.try_parse(stream)
+					if success:
+						break
 				if not success:
 					break
 				if result.value is not None:
-					yield(result.value)
+					yield(tokname, result.value)
 			if not stream.eos():
 				raise "Syntax Error"
 		return TokenStream(gen())
 
 if __name__ == '__main__':
 
-	WHITESPACE = (Literal(" ") | Literal("\t")) * (1,)
-	WHITESPACE.ignore()
-
-	EQ      = Literal("=")
-	CSTR    = Literal('"') + ExcludeChars('"') * (0,) + Literal('"')
-	VAR     = Word("-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	LCURLY  = Literal("{")
-	RCURLY  = Literal("}")
-	LSQUARE = Literal("[")
-	RSQUARE = Literal("]")
-
-	lexer = Lexer(
-		WHITESPACE,
-		EQ,
-		CSTR,
-		VAR,
-		LCURLY,
-		RCURLY,
-		LSQUARE,
-		RSQUARE
+	lex = Lexer(
+		WHITESPACE = (Literal(' ') | Literal("\t")).ignore(),
+		EQ         = Literal("="),
+		CSTR       = (Literal('"') + ExcludeChars('"') * (0,) + Literal('"')).set_result(lambda tok,res: ''.join(res[1])),
+		VAR        = Word("-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+		LCURLY     = Literal("{"),
+		RCURLY     = Literal("}"),
+		LSQUARE    = Literal("["),
+		RSQUARE    = Literal("]")
 	)
 
-	string = '{x = "13" }'
+	string = '{x = "13" y = ["1" "2" "foo"] }'
 	chars = TokenStream(iter(string))
-	tokens = lexer.lex(chars)
+
+	tokens = lex.lex(chars)
 	toks = list(tokens.unconsumed)
+	print toks
+	tokstream = TokenStream(iter(toks))
 
-"""	
 	value = Forward()
-	
-	result = VAR + EQ + value
-	result_list = result * (1,)
-	results = result * (0,)	
-	values = value * (1,)
-	tuple = LCURLY + results + RCURLY
-	list_ = LSQUARE + Optional(values | result_list) + RSQUARE
-	value << (CSTR | tuple | list_)
 
-	toks = [ "{", "VAR", "=", '"bla"', "VAR", "=", "[", "VAR", "=", '"bla"', "]", "}" ]
-	stream = TokenStream(iter(toks))
-	success, result = value.try_parse(stream)
+	result      = lex.VAR + lex.EQ + value                                    >= (lambda tok,val: (val[0], val[2]))
+	result_list = result * (1,)
+	results     = result * (0,)                                               >= (lambda tok,val: dict(val))
+	values      = value * (1,)
+	tuple       = lex.LCURLY + results + lex.RCURLY                           >= (lambda tok,val: val[1])
+	list_       = lex.LSQUARE + Optional(values | result_list) + lex.RSQUARE  >= (lambda tok,val: val[1])
+	value      << (lex.CSTR | tuple | list_)
+
+	success, result = value.try_parse(tokstream)
 	print success
-	print result
-"""
+	print result.tokens
+	print result.value
