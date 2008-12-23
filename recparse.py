@@ -77,15 +77,30 @@ class Parser(object):
 		return self
 
 	def __ge__(self, func):
+		"""
+		Assign a result function to this parser.
+		"""
 		return self.set_result(func)
 
 	def __or__(self, other):
+		"""
+		Build a parser that matches "self _or_ other".
+		"""
 		return Disj(self, other)
 
 	def __add__(self, other):
+		"""
+		Return a parser that matches "self _then_ other".
+		"""
 		return Seq(self, other)
 
 	def __mul__(self, count):
+		"""
+		If P is a parser, then:
+			P * n : matches n times P
+			P * (n,) : matches at least n times P
+			P * (n,m) : matches at least n and at most m times P
+		"""
 		if isinstance(count, tuple):
 			if len(count) == 1:
 				count = count[0]
@@ -97,6 +112,29 @@ class Parser(object):
 				return Repeat(self, cmin, cmax)
 		else:
 			return Seq(*([ self ] * count))
+
+	def __getitem__(self, *key):
+		"""
+		Indexing a parser will select some values from the result.
+		The following indexing schemes are allowed:
+			P[i] : returns just token #i 
+			P[slice] : selects the values indexed by the slice
+			P[iterable] : selects the values indexed by the iterable
+			P[k1, ...] : selects the concatenation of the P[k_j]
+		"""
+		if len(key) == 1 and isinstance(key[0], int):
+			return self.set_result(lambda tok,val: val[key[0]])
+		else:
+			def build_result(tok,val):
+				res = []
+				for k in key:
+					if hasattr(k, '__iter__'):
+						res += [ val[i] for i in k ]
+					elif isinstance(k, slice):
+						res += val[k]
+					else:
+						res.append(val[k])
+			return self.set_result(build_result)
 
 class Forward(Parser):
 
@@ -215,8 +253,8 @@ class Repeat(Parser):
 			return False, None
 		return True, ParseResult(restoks, res)
 
-def Optional(inner):
-	return Repeat(inner, 0, 1).set_result(lambda tok,val: None if len(val) == 0 else val[0])
+def Optional(inner, default_val = None):
+	return Repeat(inner, 0, 1).set_result(lambda tok,val: default_val if len(val) == 0 else val[0])
 
 def ZeroOrMore(inner):
 	return Repeat(inner)
@@ -271,35 +309,68 @@ if __name__ == '__main__':
 
 	lex = Lexer(
 		WHITESPACE = (Literal(' ') | Literal("\t")).ignore(),
-		EQ         = Literal("="),
+		EQ         = Literal('='),
+		STAR       = Literal('*'),
+		PLUS       = Literal('+'),
+		TILDE      = Literal('~'),
+		AT         = Literal('@'),
+		HAT        = Literal('^'),
+		AMPERSAND  = Literal('&'),
+		LCURLY     = Literal('{'),
+		RCURLY     = Literal('}'),
+		LSQUARE    = Literal('['),
+		RSQUARE    = Literal(']'),
+		COMMA      = Literal(','),
 		CSTR       = (Literal('"') + ExcludeChars('"') * (0,) + Literal('"')).set_result(lambda tok,res: ''.join(res[1])),
-		VAR        = Word("-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-		LCURLY     = Literal("{"),
-		RCURLY     = Literal("}"),
-		LSQUARE    = Literal("["),
-		RSQUARE    = Literal("]"),
-		COMMA      = Literal(",")
+		IDENT      = Word('-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'),
+		TOKEN      = Word('0123456789'),
+		STOP       = Literal('(gdb)'),
+		EOL        = Literal('\n\r') | Literal('\n') | Literal('\r') | Literal('\r\n')
 	)
-
-	string = '{x = "13" , y = ["1"  "2" "foo"] }'
-	chars = TokenStream(iter(string))
-
-	tokens = lex.lex(chars)
-	toks = list(tokens.unconsumed)
-	print toks
-	tokstream = TokenStream(iter(toks))
 
 	value = Forward()
 
-	result      = lex.VAR + lex.EQ + value                                    >= (lambda tok,val: (val[0], val[2]))
+	result      = lex.IDENT + lex.EQ + value                                  >= (lambda tok,val: (val[0], val[2]))
 	result_list = DelimitedList(result, lex.COMMA)
 	results     = DelimitedList(result, lex.COMMA)                            >= (lambda tok,val: dict(val))
 	values      = value * (1,)
 	tuple_      = lex.LCURLY + results + lex.RCURLY                           >= (lambda tok,val: val[1])
 	list_       = lex.LSQUARE + Optional(values | result_list) + lex.RSQUARE  >= (lambda tok,val: val[1])
 	value      << (lex.CSTR | tuple_ | list_)
+	async_class = lex.IDENT
+	optional_results = Optional((lex.COMMA + results)[1])
+	async_output = async_class + optional_results
+	result_class = lex.IDENT
 
-	success, result = value.try_parse(tokstream)
+	def echo(*s):
+		print ''.join([str(si) for si in s])
+
+	gdbout      = (lex.TILDE + lex.CSTR)[1]     >= (lambda tok,val: echo("GDB SAYS: ", val))
+	targetout   = (lex.AT + lex.CSTR)[1]        >= (lambda tok,val: echo("TARGET SAYS: ", val))        
+	gdberr      = (lex.AMPERSAND + lex.CSTR)[1] >= (lambda tok,val: echo("GDB ERR: ", val))
+	
+	notify_msg  = (Optional(lex.TOKEN) + lex.EQ + async_output)
+	exec_msg    = (Optional(lex.TOKEN) + lex.STAR + async_output)
+	status_msg  = (Optional(lex.TOKEN) + lex.PLUS + async_output)
+
+	result_rec  = (Optional(lex.TOKEN) + lex.HAT + result_class + optional_results)
+	
+	stream_rec  = (gdbout | targetout | gdberr)
+	async_rec   = (exec_msg | notify_msg | status_msg)
+
+	gdbmi_output   = (async_rec | stream_rec | result_rec | lex.STOP) + lex.EOL
+
+	# inputstr = '{x = "13" , y = ["1"  "2" "foo"] }'
+	# inputstr = 'asyncclass , x = { a = "42", pi = "3.14" }, y = "False"'
+	inputstr = '& "Foobar Error!"\n'
+	chars = TokenStream(iter(inputstr))
+
+	tokens = lex.lex(chars)
+	toks = list(tokens.unconsumed)
+	print toks
+	tokstream = TokenStream(iter(toks))
+
+	success, result = gdbmi_output.try_parse(tokstream)
 	print success
 	print result.tokens
 	print result.value
