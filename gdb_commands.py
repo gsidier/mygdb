@@ -102,9 +102,9 @@ class GdbCommandBuilder(object):
 		return self._send("-var-evaluate-expression %s" % name, token, *args, **kwargs)
 	def var_assign(self, name, expr, token = None, *args, **kwargs):
 		return self._send("-var-assign %s %s" % (name, expr), token, *args, **kwargs)
-	def var_update(self, name, print_values = "--all-values", *args, **kwargs):
-		return self._send("-var-update %s %s" % (print_values, name), token, *args, **kwargs)
-	def var_set_frozen(self, name, flag = 1, *args, **kwargs):
+	def var_update(self, name = None, print_values = "--all-values", token = None, *args, **kwargs):
+		return self._send("-var-update %s %s" % (print_values, name if name else '*'), token, *args, **kwargs)
+	def var_set_frozen(self, name, flag = 1, token = None, *args, **kwargs):
 		return self._send("-var-set-frozen %s %s" % (name, flag), token, *args, **kwargs)	
 	# Data Manipulation [TODO]
 	# Tracepoint Commands [TODO]
