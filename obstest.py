@@ -14,7 +14,7 @@ if __name__ == '__main__':
 	fifo = file(fifo_path, 'r')
 
 	evt_client = piped_event.ClientSideObserver(fifo)
-	evt_client.add_handler('onProcessedResponse', lambda : echo("Processed response"))
+	evt_client.add_handler('onProcessed', lambda : echo("Processed response"))
 	print "Waiting..."
 	evt_client.process()
 
