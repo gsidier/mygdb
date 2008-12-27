@@ -45,6 +45,10 @@ class GdbController(GdbCommandBuilder):
 		self.gdb_error_thread = threading.Thread(target = self._gdb_error_thread, args = [self.gdb.gdberr])
 		self.gdb_error_thread.setDaemon(True)
 		self.gdb_error_thread.start()
+
+	def raw_send(self, command):
+		self.gdb.gdbin.write(command.strip())
+		self.gdb.gdbin.write("\n")
 	
 	def _send(self, command, token = None):
 		self.log.debug("SENDING[%s]: %s" % (str(token), command))
@@ -122,7 +126,7 @@ class GdbSession(object):
 		self.onBreakpointSet = EventSlot() # breakpoint_desc
 		self.onThreadSwitch = EventSlot() # threadid
 		self.onFrameChange = EventSlot() # frameinfo
-		self.onProcessedResponse = EventSlot() # <no args>
+		self.onProcessed = EventSlot() # <no args>
 
 	def err_check_response(self, on_response):
 		def on_response_or_err(response):
@@ -164,7 +168,7 @@ class GdbSession(object):
 			if hasattr(results, 'frame'):
 				self._update_frame(results.frame)
 
-			self.onProcessedResponse.broadcast()
+			self.onProcessed.broadcast()
 
 	def _update_thread_id(self, threadid):
 		threadid = int(threadid)
@@ -199,11 +203,17 @@ class GdbSession(object):
 		self.log.debug(">>> TARGET OUTPUT >>> %s" % string)
 
 	# ========== SCRIPTING INTERFACE ==========
-
+	#
 	def runCommand(self, cmd):
-		eval(cmd, { 'gdb': self.controller, 'b': self.setbreak })
+		eval(cmd, { 'gdb': self.controller, 'b': self.setbreak, 'log': lambda str: self.log.debug(str) })
+		self.onProcessed.broadcast()
+	#
+	def runGdbCommand(self, cmd):
+		self.controller.raw_send(cmd)
+		self.onProcessed.broadcast()
 
 	# ========== MAIN INTERFACE ==========
+	#
 	def file(self, filename):
 		def on_response(response):
 			self.onFileChanged.broadcast(filename)
@@ -224,7 +234,6 @@ class GdbSession(object):
 		self.controller.run()
 	def cont(self):
 		self.controller.cont()
-	#
 	def step(self):
 		self.controller.step()
 	def stepi(self):
