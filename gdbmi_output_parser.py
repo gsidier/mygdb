@@ -2,6 +2,8 @@ from recparse import *
 
 # ========== LEXER ==========
 
+ESC_SEQ    = (Literal('\\') + AnyToken()).set_result(lambda tok, res: eval("'%s%s'" % (res[0], res[1])))
+
 lex = Lexer(
 	WHITESPACE = (Literal(' ') | Literal("\t")).ignore(),
 	EQ         = Literal('='),
@@ -16,11 +18,12 @@ lex = Lexer(
 	LSQUARE    = Literal('['),
 	RSQUARE    = Literal(']'),
 	COMMA      = Literal(','),
-	CSTR       = (Literal('"') + ExcludeChars('"') * (0,) + Literal('"')).set_result(lambda tok,res: ''.join(res[1])),
-	IDENT      = Word('-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'),
+	ESC_SEQ    = ESC_SEQ,
+	CSTR       = (Literal('"') + (ExcludeChars('"\\') | ESC_SEQ) * (0,) + Literal('"')).set_result(lambda tok,res: ''.join(res[1])),
+	IDENT      = Word('-_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'),
 	TOKEN      = Word('0123456789'),
 	STOP       = Literal('(gdb)'),
-	EOL        = Literal('\n\r') | Literal('\n') | Literal('\r') | Literal('\r\n')
+	EOL        = CharacterClass('\n\r') * (1,)
 )
 
 # ========== RESULT STRUCTURES ==========

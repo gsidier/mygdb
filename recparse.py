@@ -181,6 +181,9 @@ def CharacterClass(string):
 	MATCH = set(string)
 	return TokenPredicate(lambda c: c in MATCH)
 
+def AnyToken():
+	return TokenPredicate(lambda c: True)
+
 def ExcludeChars(string):
 	EXCLUDE = set(string)
 	return TokenPredicate(lambda c: c not in EXCLUDE)
