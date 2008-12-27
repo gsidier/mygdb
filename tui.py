@@ -16,8 +16,9 @@ class View(object):
 
 	def __init__(self, win, parent):
 		self.win = win
-		components = set()
-		if parent is not None:
+		self.components = set()
+		self.parent = parent
+		if self.parent is not None:
 			self.parent.components.add(self)
 
 	def update(self):
@@ -40,8 +41,9 @@ class SourceFileView(View):
 	TABSTOP = 4
 
 	def __init__(self, gdbtui, win):
+		View.__init__(self, win, gdbtui)
+
 		self.app = gdbtui
-		self.win = win	
 		self.log = logging.getLogger("gdb")
 		
 		maxy, maxx = self.win.getmaxyx()
@@ -86,7 +88,6 @@ class SourceFileView(View):
 			visible_lines = self.src_line_data[startoff:endoff]
 			self.log.debug("SRC LINE : %s" % self.src_line)
 			for i in xrange(len(visible_lines)):
-				self.log.debug("Line y =  %d" % i)
 				lineno = i + startline 
 				line = visible_lines[i].replace('\t', ' ' * self.TABSTOP)
 				if lineno == self.src_line:
@@ -130,6 +131,7 @@ class SourceFileView(View):
 
 class CommandPanel(View):
 	def __init__(self, gdbtui, win):
+		View.__init__(self, win, gdbtui)
 		self.app = gdbtui
 		self.win = win
 		
@@ -151,6 +153,24 @@ class CommandPanel(View):
 		self.win.addnstr(0, 0, errmsg, max(len(errmsg), maxx))
 		self.win.refresh()
 
+class LogView(View, logging.Handler):
+		
+	def __init__(self, gdbtui, win, log):
+		View.__init__(self, win, gdbtui)
+		self.win.scrollok(1)
+		maxy, maxx = self.win.getmaxyx()
+		self.win.setscrreg(0, maxy - 1)
+		logging.Handler.__init__(self)
+		self.log = log
+		self.log.addHandler(self)
+
+	def emit(self, record):
+		maxy, maxx = self.win.getmaxyx()
+		s = self.format(record)
+		for line in s.splitlines():
+			self.win.scroll()
+			self.win.addnstr(maxy - 1, 0, s, maxx)
+
 class TopLevelKeyboardInput(Controller):
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
@@ -167,7 +187,8 @@ class TopLevelKeyboardInput(Controller):
 		's': lambda self: self.app.commandHandler.onStep(),
 		'b': lambda self: self.app.commandHandler.onBreak(),
 		'q': lambda self: self.app.commandHandler.onQuit(),
-		':': lambda self: self.app.commandHandler.onStartInput(),
+		':': lambda self: self.app.commandHandler.onStartInput(mode='python'),
+		'!': lambda self: self.app.commandHandler.onStartInput(mode='gdb'),
 		'KEY_UP': lambda self: self.app.commandHandler.scrollUp(),
 		'KEY_DOWN': lambda self: self.app.commandHandler.scrollDown(),
 		'KEY_F(1)': lambda self: None
@@ -182,6 +203,7 @@ class TopLevelKeyboardInput(Controller):
 					log.debug("KEY PRESSED : '%s'" % c)
 					if self.ACTIONS.has_key(c):
 						self.ACTIONS[c](self)
+						self.app.commandHandler.onProcessed()
 				except:
 					pass
 			else:
@@ -205,7 +227,9 @@ class CommandHandler(object):
 		self.onBreak = self.commandQueue.schedule_handler(self._onBreak)
 		self.onQuit = self.commandQueue.schedule_handler(self._onQuit)
 		self.onStartInput = self.commandQueue.schedule_handler(self._onStartInput)
-		
+	
+		self.onProcessed = self.commandQueue.schedule_handler(self._onProcessed)
+	
 		self.onScrollUp = self.commandQueue.schedule_handler(self._onScrollUp)
 		self.onScrollDown = self.commandQueue.schedule_handler(self._onScrollDown)
 		
@@ -221,12 +245,19 @@ class CommandHandler(object):
 		self.gdb.setbreak(loc='main')
 	def _onQuit(self):
 		self.commandQueue.process = False
-	def _onStartInput(self):
+	def _onStartInput(self, mode):
 		cmd = self.commandPanel.input()
 		try:
-			res = self.gdb.runCommand(cmd)
+			if mode == 'python':
+				res = self.gdb.runCommand(cmd)
+			elif mode == 'gdb':
+				res = self.gdb.runGdbCommand(cmd)
 		except Exception, e:
 			self.commandPanel.disperr(e.message)
+	
+	def _onProcessed(self):
+		self.gdb.onProcessed.broadcast()
+	
 	def _onScrollDown(self):
 		pass
 	def _onScrollUp(self):
@@ -235,6 +266,8 @@ class CommandHandler(object):
 class PyGdbTui(TopLevelView):
 
 	def __init__(self, gdb, topwin):
+		TopLevelView.__init__(self, topwin)
+		
 		self.gdb = gdb
 		self.sess = pygdb.GdbSession(gdb)
 		self.log = logging.getLogger('gdb')
@@ -244,8 +277,11 @@ class PyGdbTui(TopLevelView):
 	
 		# Views
 		maxy, maxx = self.topwin.getmaxyx()
-		src_view_win = self.topwin.subwin(maxy-1, maxx, 0, 0)
+		y1 = int(.65 * maxy)
+		src_view_win = self.topwin.subwin(y1, maxx, 0, 0)
 		self.src_view = SourceFileView(self, src_view_win)
+		log_view_win = self.topwin.subwin(maxy - y1 - 1, maxx, y1, 0)
+		self.log_view = LogView(self, log_view_win, self.log)
 		command_panel_win = self.topwin.subwin(1, maxx, maxy - 1, 0)
 		self.command_panel = CommandPanel(self, command_panel_win)
 
@@ -256,7 +292,7 @@ class PyGdbTui(TopLevelView):
 		self.onStartCommandInput = EventSlot()
 		
 		# Event Handlers
-		self.sess.onProcessedResponse.subscribe(self.onGdbProcessedResponse)
+		self.sess.onProcessed.subscribe(self.onGdbProcessedResponse)
 		self.scheduled_onGdbProcessedResponse = self.commandHandler.commandQueue.schedule_handler(self._onGdbProcessedResponse)
 
 		# Input
@@ -269,6 +305,7 @@ class PyGdbTui(TopLevelView):
 		self.src_view.draw()
 		self.topwin.refresh()
 		self.src_view.client_area.refresh()
+		self.log_view.win.refresh()
 
 if __name__ == '__main__':
 	
@@ -296,7 +333,7 @@ if __name__ == '__main__':
 		log.debug("CREATED FIFO")
 
 		stub = piped_event.Stub(fifo)
-		stub.subscribe(app.sess.onProcessedResponse, 'onProcessedResponse')
+		stub.subscribe(app.sess.onProcessed, 'onProcessed')
 		"""
 		#
 		app.commandHandler.commandQueue.run()
