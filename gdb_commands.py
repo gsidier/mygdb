@@ -116,8 +116,8 @@ class GdbCommandBuilder(object):
 			filespec = "-f %s -l %s" % (file, line)
 			if nlines is not None:
 				filespec += " -n %s" % nlines
-		else
-		filespec = ""
+		else:
+			filespec = ""
 		return self._send("-data-disassemble %s %s -- %d" % (addrspec, filespec, mode), token, *args, **kwargs)
 	def data_eval(self, expr, token = None, *args, **kwargs):
 		return self._send("-data-evaluate-expression %s" % expr, token, *args, **kwargs)
@@ -125,12 +125,12 @@ class GdbCommandBuilder(object):
 		return self._send("-data-list-changed-registers", token, *args, **kwargs)
 	def data_list_reg_names(self, token = None, *args, **kwargs):
 		return self._send("-data-list-register-names", token, *args, **kwargs)
-	def data_list_reg_values(self, format, regs = None, token = None, *args, **kwargs)
+	def data_list_reg_values(self, format, regs = None, token = None, *args, **kwargs):
 		regspec = "" if regs is None else ' '.join(str(r) for r in regs)
 		return self._send("-data-list-register-values %s %s" % (format, regspec), token, *args, **kwargs)
 	def data_read_mem(self, addr, format, word_size, nrows, ncols, byte_offset = None, aschar = None, token = None, *args, **kwargs):
 		offsetspec = "" if offset is None else "-o %s" % byte_offset
-		ascharspec = "" is aschar is None else str(aschar)
+		ascharspec = "" if aschar is None else str(aschar)
 		return self._send("-data-read-memory %s %s %s %s %s %s %s" % (offsetspec, addr, format, word_size, nrows, ncols, ascharspec), token, *args, **kwargs)
 	# Tracepoint Commands [TODO]
 	# Symbol Query Commands [TODO]
