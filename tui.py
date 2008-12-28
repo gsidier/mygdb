@@ -14,7 +14,7 @@ import subprocess
 
 class View(object):
 
-	def __init__(self, win, parent):
+	def __init__(self, parent, win):
 		self.win = win
 		self.components = set()
 		self.parent = parent
@@ -22,33 +22,52 @@ class View(object):
 			self.parent.components.add(self)
 
 	def update(self):
-		for c in components:
+		for c in self.components:
 			c.update()
 		self.draw()
 	
-	def draw(self, canvas):
+	def refresh(self):
+		self.win.refresh()
+		for c in self.components:
+			c.refresh()
+	
+	def draw(self):
 		pass
 
 class TopLevelView(View):
 	def __init__(self, win):
-		View.__init__(self, win, None)
+		View.__init__(self, None, win)
 
 class Controller(object):
 	pass
+
+class NamedPanel(View):
+	def __init__(self, parent, win, name):
+		View.__init__(self, parent, win)
+		self.name = name
+		maxy, maxx = self.win.getmaxyx()
+		self.client_area = win.derwin(maxy - 2, maxx - 2, 1, 1)
+
+	def refresh(self):
+		self.win.refresh()
+
+	def draw(self):
+		self.win.border()
+		maxy, maxx = self.win.getmaxyx()
+		self.win.addnstr(0, 1, "[ %s ]" % self.name, max(0, maxx - 1))
 
 class SourceFileView(View):
 
 	TABSTOP = 4
 
 	def __init__(self, gdbtui, win):
-		View.__init__(self, win, gdbtui)
+		View.__init__(self, gdbtui.src_view_panel, win)
 
 		self.app = gdbtui
 		self.log = logging.getLogger("gdb")
 		
 		maxy, maxx = self.win.getmaxyx()
 		self.log.debug("SRC VIEW WIN %d %d" % (maxx, maxy))
-		self.client_area = win.derwin(maxy-2, maxx-2, 1, 1)
 		self.line_off = 0
 		self.src_file = None
 		self.src_line = None # 1-based
@@ -70,10 +89,9 @@ class SourceFileView(View):
 
 	def draw(self):
 		if self.dirty: 
-			self.win.border()
 			curses.curs_set(0)
-			maxy, maxx = self.client_area.getmaxyx()
-			self.client_area.clear()
+			maxy, maxx = self.win.getmaxyx()
+			self.win.clear()
 			# if src_line is of the screen then recenter view so that src_line is approx 1/5th down from top of screen
 			if self.src_line is not None:
 				if self.line_off is None or self.src_line < self.line_off + 1 or self.src_line >= self.line_off + 1 + maxy:
@@ -91,19 +109,19 @@ class SourceFileView(View):
 				lineno = i + startline 
 				line = visible_lines[i].replace('\t', ' ' * self.TABSTOP)
 				if lineno == self.src_line:
-					self.client_area.attron(curses.A_REVERSE)
-					self.client_area.attron(curses.A_BOLD)
+					self.win.attron(curses.A_REVERSE)
+					self.win.attron(curses.A_BOLD)
 					self.log.debug("DRAWING WITH CURRENT LINE : %d" % lineno)
 				else:
-					self.client_area.attroff(curses.A_REVERSE)
-					self.client_area.attroff(curses.A_BOLD)
+					self.win.attroff(curses.A_REVERSE)
+					self.win.attroff(curses.A_BOLD)
 				linedata = [' '] * (maxndigits + 1)
 				linedata[:maxndigits] = str(lineno)
 				linedata[maxndigits+1:] = line
 				linedata = ''.join(linedata).strip()
 				linedata = linedata[:maxx]
 				# self.log.debug("Gonna paste str (len %d at %d, %d) '%s'" % (len(linedata), 0, i, linedata))
-				self.client_area.addnstr(i, 0, linedata, maxx)
+				self.win.addnstr(i, 0, linedata, maxx)
 		self.dirty = False
 
 	def update_src_file(self, path):
@@ -123,6 +141,7 @@ class SourceFileView(View):
 		log.debug("EVENT : SourceFileView << onFrameChange")
 		if hasattr(frame, 'file'):
 			self.update_src_file(frame.file)
+			self.app.src_view_panel.name = frame.file
 		if hasattr(frame, 'line'):
 			self.src_line = int(frame.line)
 			self.log.debug("CURRENT LINE : %d" % self.src_line)
@@ -131,7 +150,7 @@ class SourceFileView(View):
 
 class CommandPanel(View):
 	def __init__(self, gdbtui, win):
-		View.__init__(self, win, gdbtui)
+		View.__init__(self, gdbtui, win)
 		self.app = gdbtui
 		self.win = win
 		
@@ -145,7 +164,7 @@ class CommandPanel(View):
 		return cmd
 	
 	def draw(self):
-		self.win.clear()
+		pass #self.win.clear()
 
 	def disperr(self, errmsg):
 		self.win.clear()
@@ -156,7 +175,7 @@ class CommandPanel(View):
 class LogView(View, logging.Handler):
 		
 	def __init__(self, gdbtui, win, log):
-		View.__init__(self, win, gdbtui)
+		View.__init__(self, gdbtui, win)
 		self.win.scrollok(1)
 		maxy, maxx = self.win.getmaxyx()
 		self.win.setscrreg(0, maxy - 1)
@@ -278,11 +297,12 @@ class PyGdbTui(TopLevelView):
 		# Views
 		maxy, maxx = self.topwin.getmaxyx()
 		y1 = int(.65 * maxy)
-		src_view_win = self.topwin.subwin(y1, maxx, 0, 0)
-		self.src_view = SourceFileView(self, src_view_win)
-		log_view_win = self.topwin.subwin(maxy - y1 - 1, maxx, y1, 0)
+		src_view_win = self.topwin.derwin(y1, maxx, 0, 0)
+		self.src_view_panel = NamedPanel(self, src_view_win, "<source>")
+		self.src_view = SourceFileView(self, self.src_view_panel.client_area)
+		log_view_win = self.topwin.derwin(maxy - y1 - 1, maxx, y1, 0)
 		self.log_view = LogView(self, log_view_win, self.log)
-		command_panel_win = self.topwin.subwin(1, maxx, maxy - 1, 0)
+		command_panel_win = self.topwin.derwin(1, maxx, maxy - 1, 0)
 		self.command_panel = CommandPanel(self, command_panel_win)
 
 		# Command handler
@@ -302,10 +322,19 @@ class PyGdbTui(TopLevelView):
 		self.scheduled_onGdbProcessedResponse()
 	def _onGdbProcessedResponse(self):
 		self.log.debug("### REFRESH ###")
-		self.src_view.draw()
+		self.update()
+		#self.src_view.draw()
+		#self.topwin.refresh()
+		#self.src_view.win.refresh()
+		#self.log_view.win.refresh()
+		
+		self.refresh()
+		"""
 		self.topwin.refresh()
-		self.src_view.client_area.refresh()
+		self.src_view_panel.win.refresh()
 		self.log_view.win.refresh()
+		self.command_panel.win.refresh()
+		"""
 
 if __name__ == '__main__':
 	
