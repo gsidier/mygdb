@@ -113,7 +113,7 @@ class GdbCommandBuilder(object):
 		else:
 			addrspec = ""
 		if filename is not None and line is not None:
-			filespec = "-f %s -l %s" % (file, line)
+			filespec = "-f %s -l %s" % (filename, line)
 			if nlines is not None:
 				filespec += " -n %s" % nlines
 		else:
