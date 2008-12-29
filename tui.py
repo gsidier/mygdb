@@ -103,7 +103,7 @@ class LayoutView(View):
 		
 		self._subwins = [ subwin(x0, sz) for sz, x0 in zip(SZ, X0) ]
 		
-	def layout(self, sz):
+	def layout(self, *sz):
 		self._sz = list(sz)
 		self._layout()
 
@@ -346,26 +346,19 @@ class PyGdbTui(TopLevelView):
 		self.topwin.keypad(1)
 	
 		# Views
-		"""	
-		maxy, maxx = self.topwin.getmaxyx()
-		y1 = int(.65 * maxy)
-		src_view_win = self.topwin.derwin(y1, maxx, 0, 0)
-		self.src_view_panel = NamedPanel(self, src_view_win, "<source>")
-		self.src_view = SourceFileView(self, self.src_view_panel.client_area)
-		log_view_win = self.topwin.derwin(maxy - y1 - 1, maxx, y1, 0)
-		self.log_view = LogView(self, log_view_win, self.log)
-		command_panel_win = self.topwin.derwin(1, maxx, maxy - 1, 0)
-		self.command_panel = CommandPanel(self, command_panel_win)
-		"""
 		self.layout = LayoutView(self, self.topwin, 'V')
-		self.layout.layout([ -.5, -.5, 1 ])
+		self.layout.layout( -.65, -.35, 1 )
+		upper_panel, log_view_win, command_panel_win = self.layout._subwins
 		
-		src_view_win, log_view_win, command_panel_win = self.layout._subwins
+		upper_layout = LayoutView(self.layout, upper_panel, 'H')
+		upper_layout.layout( -.6, -.4 )
+		src_view_win, watch_win = upper_layout._subwins
+		
 		self.src_view_panel = NamedPanel(self, src_view_win, "<source>")
 		self.src_view = SourceFileView(self, self.src_view_panel.client_area)
 		self.log_view = LogView(self, log_view_win, self.log)
 		self.command_panel = CommandPanel(self, command_panel_win)
-	
+		self.watch_panel = NamedPanel(self, watch_win, "watch")	
 
 		# Command handler
 		self.commandHandler = CommandHandler(self.sess, self.command_panel)
@@ -385,18 +378,7 @@ class PyGdbTui(TopLevelView):
 	def _onGdbProcessedResponse(self):
 		self.log.debug("### REFRESH ###")
 		self.update()
-		#self.src_view.draw()
-		#self.topwin.refresh()
-		#self.src_view.win.refresh()
-		#self.log_view.win.refresh()
-		
 		self.refresh()
-		"""
-		self.topwin.refresh()
-		self.src_view_panel.win.refresh()
-		self.log_view.win.refresh()
-		self.command_panel.win.refresh()
-		"""
 
 if __name__ == '__main__':
 	
