@@ -72,7 +72,7 @@ class LayoutView(View):
 	def __init__(self, parent, win, orientation = 'H'):
 		View.__init__(self, parent, win)
 		self.orientation = orientation.strip().upper()
-		self._subviews = [] # [ (size, view) ] where size > 0: abs # cols, size < 0: rel # cols
+		self._sz = []
 	
 	def _layout(self):
 		maxy, maxx = self.win.getmaxyx()
@@ -80,35 +80,32 @@ class LayoutView(View):
 			maxz = maxx
 		else:
 			maxz = maxy
-		total_abs = sum( + sz for sz,view in self._subviews if sz > 0 )
-		total_rel = sum( float(- sz) for sz,view in self._subviews if sz < 0 )
+		total_abs = sum( + sz for sz in self._sz if sz > 0 )
+		total_rel = sum( float(- sz) for sz in self._sz if sz < 0 )
 		rel_rem = max(0, maxz - total_abs) # remaining for relative sizes
 
-		rel_pos = acc(lambda x,y: x+y, [ rel_rem * (-sz / total_rel) if sz < 0 else 0 for sz,v in self._subviews ], 0)
+		rel_pos = acc(lambda x,y: x+y, [ rel_rem * (-sz / total_rel) if sz < 0 else 0 for sz in self._sz ], 0)
 		rel_pos = [ int(round(x)) for x in rel_pos ]
 		rel_pos[-1] = rel_rem
 		rel_sz = [ rel_pos[i] - rel_pos[i-1] for i in xrange(1, len(rel_pos))]
 
-		abs_sz = [ sz if sz > 0 else None for sz,v in self._subviews ]
+		abs_sz = [ sz if sz > 0 else None for sz in self._sz ]
 	
 		def subwin(x0, sz):
 			maxy, maxx = self.win.getmaxyx()
-			if orientation == 'H':
+			if self.orientation == 'H':
 				return self.win.derwin(maxy, sz, 0, x0)
 			else:
 				return self.win.derwin(sz, maxx, x0, 0)
 		
 		SZ = [ relsz if abssz is None else abssz for abssz,relsz in zip(abs_sz, rel_sz) ]
-		X0 = list(acc(lambda x,y: x+y, sz, 0))[:-1]
+		X0 = list(acc(lambda x,y: x+y, SZ, 0))[:-1]
 		
-		subwins = [ subwin(x0, sz) for for sz, x0 in zip(SZ, X0) ]
+		self._subwins = [ subwin(x0, sz) for sz, x0 in zip(SZ, X0) ]
 		
-		for ((sz,v),w) in zip(self._subviews, subwins):
-			v.win = w
-			
-	
-	def draw(self):
-		self.update()
+	def layout(self, sz):
+		self._sz = list(sz)
+		self._layout()
 
 class SourceFileView(View):
 
@@ -349,6 +346,7 @@ class PyGdbTui(TopLevelView):
 		self.topwin.keypad(1)
 	
 		# Views
+		"""	
 		maxy, maxx = self.topwin.getmaxyx()
 		y1 = int(.65 * maxy)
 		src_view_win = self.topwin.derwin(y1, maxx, 0, 0)
@@ -358,6 +356,16 @@ class PyGdbTui(TopLevelView):
 		self.log_view = LogView(self, log_view_win, self.log)
 		command_panel_win = self.topwin.derwin(1, maxx, maxy - 1, 0)
 		self.command_panel = CommandPanel(self, command_panel_win)
+		"""
+		self.layout = LayoutView(self, self.topwin, 'V')
+		self.layout.layout([ -.5, -.5, 1 ])
+		
+		src_view_win, log_view_win, command_panel_win = self.layout._subwins
+		self.src_view_panel = NamedPanel(self, src_view_win, "<source>")
+		self.src_view = SourceFileView(self, self.src_view_panel.client_area)
+		self.log_view = LogView(self, log_view_win, self.log)
+		self.command_panel = CommandPanel(self, command_panel_win)
+	
 
 		# Command handler
 		self.commandHandler = CommandHandler(self.sess, self.command_panel)
