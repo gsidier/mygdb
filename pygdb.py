@@ -96,7 +96,7 @@ class WatchedVar(object):
 		self.expr = expr
 		self.type = type
 		self.value = value
-		self.numchild = numchild
+		self.numchild = int(numchild)
 		self.children = None
 
 	def __repr__(self):
@@ -144,6 +144,7 @@ class GdbSession(object):
 		self.onThreadSwitch = EventSlot() # threadid
 		self.onFrameChange = EventSlot() # frameinfo
 		self.onProcessed = EventSlot() # <no args>
+		self.onWatchUpdate = EventSlot() # var
 
 	def err_check_response(self, on_response):
 		def on_response_or_err(response):
@@ -209,6 +210,9 @@ class GdbSession(object):
 			else:
 				return None
 		return v
+
+	def _update_watch(self, v):
+		self.onWatchUpdate.broadcast(v)
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
@@ -287,6 +291,7 @@ class GdbSession(object):
 			self._watch[response.name] = v
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			self.var_list_children(response.name)
+			self._update_watch(v)
 		self.controller.var_create(expr, on_response = on_response)
 	def var_update(self):
 		def on_response(response):
@@ -297,11 +302,12 @@ class GdbSession(object):
 					if v is not None:
 						v.value = upd.value
 						self.log.debug("WATCHED VAR : %s" % v)
+						self._update_watch(v)
 		self.controller.var_update(on_response = on_response)
 	def var_list_children(self, name):
 		def on_response(response):
 			v = self._get_watched_var(name)
-			if v is not None:
+			if v is not None and hasattr(response, 'children'):
 				v.children = {}
 				for tag,child in response.children:
 					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.type, value = None, numchild = child.numchild)
@@ -312,6 +318,7 @@ class GdbSession(object):
 			v = self._get_watched_var(name)
 			if v is not None:
 				v.value = response.value
+				self._update_watch(v)
 		self.controller.var_eval(name, on_response = on_response)
 
 if __name__ == '__main__':
