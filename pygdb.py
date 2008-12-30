@@ -90,6 +90,21 @@ class GdbController(GdbCommandBuilder):
 			self.target_hist.append(line)
 		self.log.debug("(TARGET stdout : closes)")
 
+class WatchedVar(object):
+	def __init__(self, name, expr, type, value, numchild):
+		self.name = name
+		self.expr = expr
+		self.type = type
+		self.value = value
+		self.numchild = numchild
+		self.children = None
+
+	def __repr__(self):
+		return "WatchedVar(name=%s, expr=%s, type=%s, value=%s, numchild=%s)" % (self.name, self.expr, self.type, self.value, self.numchild)
+
+	def __str__(self):
+		return self.__repr__()
+
 class GdbSession(object):
 
 	class MyGdbController(GdbController):
@@ -116,6 +131,8 @@ class GdbSession(object):
 		self._file = None
 
 		self._response_handlers = {}
+		
+		self._watch = {}
 		
 		# State data
 		self.threadid = None
@@ -156,19 +173,21 @@ class GdbSession(object):
 				more = handler(results)
 				if not more:
 					self._response_handlers.pop(token)
-				return True
 			else:
 				self.log.debug("TOKEN NOT FOUND: %s" % repr(token))
 		
-			self.log.debug("RESULTS = %s", results)
-	
+			self.log.debug("[%s] RESULTS = %s", resultClass, results)
+			
 			# Event based handlers
 			if hasattr(results, 'thread-id'):
 				self._update_thread_id(results['thread-id'])
 			if hasattr(results, 'frame'):
 				self._update_frame(results.frame)
-
+			
 			self.onProcessed.broadcast()
+			
+			if resultClass == 'stopped':
+				self.var_update()
 
 	def _update_thread_id(self, threadid):
 		threadid = int(threadid)
@@ -178,6 +197,18 @@ class GdbSession(object):
 
 	def _update_frame(self, frame):
 		self.onFrameChange.broadcast(frame)
+
+	def _get_watched_var(self, path):
+		path = path.split('.')
+		children = self._watch
+		v = None
+		for item in path:
+			if children is not None and item in children:
+				v = children[item]
+				children = v.children
+			else:
+				return None
+		return v
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
@@ -205,7 +236,13 @@ class GdbSession(object):
 	# ========== SCRIPTING INTERFACE ==========
 	#
 	def runCommand(self, cmd):
-		eval(cmd, { 'gdb': self.controller, 'b': self.setbreak, 'log': lambda str: self.log.debug(str) })
+		eval(cmd, {
+			'app': self, 
+			'gdb': self.controller, 
+			'b': self.setbreak, 
+			'w': self.var_create, 
+			'log': lambda str: self.log.debug(str) 
+		})
 		self.onProcessed.broadcast()
 	#
 	def runGdbCommand(self, cmd):
@@ -242,6 +279,40 @@ class GdbSession(object):
 		self.controller.next()
 	def nexti(self):
 		self.controller.nexti()
+	#
+	def var_create(self, expr):
+		def on_response(response):
+			self.log.debug("VAR CREATE : %s" % response)
+			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.value, numchild = response.numchild)
+			self._watch[response.name] = v
+			self.log.debug("WATCHLIST : %s" % self._watch)
+			self.var_list_children(response.name)
+		self.controller.var_create(expr, on_response = on_response)
+	def var_update(self):
+		def on_response(response):
+			self.log.debug("VAR UPDATE : %s" % response)
+			if hasattr(response, 'changelist') and hasattr(response.changelist, '__iter__'):
+				for upd in response.changelist:
+					v = self._get_watched_var(upd.name)
+					if v is not None:
+						v.value = upd.value
+						self.log.debug("WATCHED VAR : %s" % v)
+		self.controller.var_update(on_response = on_response)
+	def var_list_children(self, name):
+		def on_response(response):
+			v = self._get_watched_var(name)
+			if v is not None:
+				v.children = {}
+				for tag,child in response.children:
+					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.type, value = None, numchild = child.numchild)
+					self.var_eval(child.name)
+		self.controller.var_list_children(name, on_response = on_response)
+	def var_eval(self, name):
+		def on_response(response):
+			v = self._get_watched_var(name)
+			if v is not None:
+				v.value = response.value
+		self.controller.var_eval(name, on_response = on_response)
 
 if __name__ == '__main__':
 	g = GdbMI()
