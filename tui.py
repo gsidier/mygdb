@@ -241,6 +241,44 @@ class LogView(View, logging.Handler):
 			self.win.scroll()
 			self.win.addnstr(maxy - 1, 0, s, maxx)
 
+class WatchView(View):
+
+	TAB = 4
+
+	def __init__(self, gdbtui, win):
+		View.__init__(self, gdbtui, win)
+		self.app = gdbtui
+		self.dirty = False
+		self.app.sess.onWatchUpdate.subscribe(self.onWatchUpdate)
+	
+	def draw(self):
+		if not self.dirty:
+			return
+		self.win.erase()
+		maxy, maxx = self.win.getmaxyx()
+		def rec(children, i, j):
+			for name, v in children.iteritems():
+				if i > maxy:
+					break
+				s = "%s : %s" % (v.expr, v.value)
+				self.win.addnstr(i, j, s, max(0, maxx - j) )
+				i += 1
+				if v.children is not None:
+					i = rec(v.children, i, j + self.TAB)
+				else:
+					if v.numchild > 0:
+						if i > maxy:
+							break
+						j2 = j + self.TAB
+						s = "<%s children>" % v.numchild
+						self.win.addnstr(i, j2, s, max(0, maxx - j2))
+			return i
+		rec(self.app.sess._watch, 0, 0)
+			
+
+	def onWatchUpdate(self, v):
+		self.dirty = True
+
 class TopLevelKeyboardInput(Controller):
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui
@@ -283,7 +321,7 @@ class TopLevelKeyboardInput(Controller):
 		self._process = False
 		res = function()
 		self._process = True
-		return res
+		return res	
 
 class CommandHandler(object):
 	def __init__(self, gdb, commandPanel):
@@ -358,7 +396,8 @@ class PyGdbTui(TopLevelView):
 		self.src_view = SourceFileView(self, self.src_view_panel.client_area)
 		self.log_view = LogView(self, log_view_win, self.log)
 		self.command_panel = CommandPanel(self, command_panel_win)
-		self.watch_panel = NamedPanel(self, watch_win, "watch")	
+		self.watch_panel = NamedPanel(self, watch_win, "watch")
+		self.watch_view = WatchView(self, self.watch_panel.client_area)
 
 		# Command handler
 		self.commandHandler = CommandHandler(self.sess, self.command_panel)
