@@ -258,6 +258,8 @@ class WatchView(View):
 		maxy, maxx = self.win.getmaxyx()
 		def rec(children, i, j):
 			for name, v in children.iteritems():
+				if not v.in_scope:
+					continue
 				if i > maxy:
 					break
 				s = "%s : %s" % (v.expr, v.value)

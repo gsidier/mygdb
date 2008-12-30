@@ -91,12 +91,13 @@ class GdbController(GdbCommandBuilder):
 		self.log.debug("(TARGET stdout : closes)")
 
 class WatchedVar(object):
-	def __init__(self, name, expr, type, value, numchild):
+	def __init__(self, name, expr, type, value, numchild, in_scope):
 		self.name = name
 		self.expr = expr
 		self.type = type
 		self.value = value
 		self.numchild = int(numchild)
+		self.in_scope = in_scope
 		self.children = None
 
 	def __repr__(self):
@@ -287,7 +288,7 @@ class GdbSession(object):
 	def var_create(self, expr):
 		def on_response(response):
 			self.log.debug("VAR CREATE : %s" % response)
-			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.value, numchild = response.numchild)
+			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.value, numchild = response.numchild, in_scope = True)
 			self._watch[response.name] = v
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			self.var_list_children(response.name)
@@ -300,9 +301,12 @@ class GdbSession(object):
 				for upd in response.changelist:
 					v = self._get_watched_var(upd.name)
 					if v is not None:
-						v.value = upd.value
-						self.log.debug("WATCHED VAR : %s" % v)
-						self._update_watch(v)
+						if hasattr(upd, 'value'):
+							v.value = upd.value
+							self.log.debug("WATCHED VAR : %s" % v)
+							self._update_watch(v)
+						if hasattr(upd, 'in_scope'):
+							v.in_scope = upd.in_scope == 'true'
 		self.controller.var_update(on_response = on_response)
 	def var_list_children(self, name):
 		def on_response(response):
@@ -310,7 +314,7 @@ class GdbSession(object):
 			if v is not None and hasattr(response, 'children'):
 				v.children = {}
 				for tag,child in response.children:
-					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.type, value = None, numchild = child.numchild)
+					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.type, value = None, numchild = child.numchild, in_scope = True)
 					self.var_eval(child.name)
 		self.controller.var_list_children(name, on_response = on_response)
 	def var_eval(self, name):
