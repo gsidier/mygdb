@@ -15,11 +15,19 @@ import subprocess
 class View(object):
 
 	def __init__(self, parent, win):
-		self.win = win
 		self.components = set()
+		self._set_win(parent, win)
+
+	def _set_win(self, parent, win):
+		"""Sets the parent component and the window (canvas). Do not override."""
+		self.win = win
 		self.parent = parent
 		if self.parent is not None:
 			self.parent.components.add(self)
+
+	def set_win(self, parent, win):
+		"""Resets the parent component and the window (canvas). This function may be overridden."""
+		self._set_win(parent, win)
 
 	def update(self):
 		for c in self.components:
@@ -45,12 +53,24 @@ class NamedPanel(View):
 	def __init__(self, parent, win, name):
 		View.__init__(self, parent, win)
 		self.name = name
+		self.set_win(parent, win)
+		self.inner = None
+	
+	def set_win(self, parent, win):
+		self._set_win(parent, win)
 		maxy, maxx = self.win.getmaxyx()
-		self.client_area = win.derwin(maxy - 2, maxx - 2, 1, 1)
-
+		self.client_area = self.win.derwin(maxy - 2, maxx - 2, 1, 1)
+	
+	def set_inner(self, inner):
+		if self.inner is not None:
+			self.components.remove(self.inner)
+		self.inner = inner
+		if self.inner is not None:
+			self.inner.set_win(self, self.client_area)
+	
 	def refresh(self):
 		self.win.refresh()
-
+	
 	def draw(self):
 		self.win.border()
 		maxy, maxx = self.win.getmaxyx()
@@ -83,14 +103,14 @@ class LayoutView(View):
 		total_abs = sum( + sz for sz in self._sz if sz > 0 )
 		total_rel = sum( float(- sz) for sz in self._sz if sz < 0 )
 		rel_rem = max(0, maxz - total_abs) # remaining for relative sizes
-
+		
 		rel_pos = acc(lambda x,y: x+y, [ rel_rem * (-sz / total_rel) if sz < 0 else 0 for sz in self._sz ], 0)
 		rel_pos = [ int(round(x)) for x in rel_pos ]
 		rel_pos[-1] = rel_rem
 		rel_sz = [ rel_pos[i] - rel_pos[i-1] for i in xrange(1, len(rel_pos))]
-
+		
 		abs_sz = [ sz if sz > 0 else None for sz in self._sz ]
-	
+		
 		def subwin(x0, sz):
 			maxy, maxx = self.win.getmaxyx()
 			if self.orientation == 'H':
@@ -107,29 +127,44 @@ class LayoutView(View):
 		self._sz = list(sz)
 		self._layout()
 
+class Settings(object):
+	
+	COLOR_DEFAULT = (curses.COLOR_WHITE, curses.COLOR_BLACK)
+	COLOR_ACTIVE_BORDER = (curses.COLOR_YELLOW, curses.COLOR_BLACK)
+
+	PAIR_DEFAULT = 1
+	PAIR_ACTIVE_BORDER = 2
+
+	def apply(self):
+		curses.init_pair(self.PAIR_DEFAULT, *self.COLOR_DEFAULT)
+		curses.init_pair(self.PAIR_ACTIVE_BORDER, *self.COLOR_ACTIVE_BORDER)
+
+
 class SourceFileView(View):
 
 	TABSTOP = 4
 
-	def __init__(self, gdbtui, win):
-		View.__init__(self, gdbtui.src_view_panel, win)
+	def __init__(self, gdbtui, parent = None, win = None):
+		View.__init__(self, parent, win)
 
 		self.app = gdbtui
 		self.log = logging.getLogger("gdb")
-		
-		maxy, maxx = self.win.getmaxyx()
-		self.log.debug("SRC VIEW WIN %d %d" % (maxx, maxy))
+
 		self.line_off = 0
 		self.src_file = None
 		self.src_line = None # 1-based
 		self.src_line_data = []
 
 		self.dirty = True
-		self.draw()
+
+		if win is not None:
+			maxy, maxx = self.win.getmaxyx()
+			self.log.debug("SRC VIEW WIN %d %d" % (maxx, maxy))
+			self.draw()
 
 		self.app.sess.onBreakpointSet.subscribe(self.onBreakpointSet)
 		self.app.sess.onFrameChange.subscribe(self.onFrameChange)
-		
+	
 	def __del__(self):
 		pass
 
@@ -139,7 +174,7 @@ class SourceFileView(View):
 		return buf[lineno - 1]
 
 	def draw(self):
-		if self.dirty: 
+		if self.dirty and self.win is not None: 
 			curses.curs_set(0)
 			maxy, maxx = self.win.getmaxyx()
 			self.win.clear()
@@ -171,7 +206,6 @@ class SourceFileView(View):
 				linedata[maxndigits+1:] = line
 				linedata = ''.join(linedata).strip()
 				linedata = linedata[:maxx]
-				# self.log.debug("Gonna paste str (len %d at %d, %d) '%s'" % (len(linedata), 0, i, linedata))
 				self.win.addnstr(i, 0, linedata, maxx)
 		self.dirty = False
 
@@ -199,9 +233,22 @@ class SourceFileView(View):
 		else:
 			self.src_line = None
 
+	def scroll_down(self):
+		self.line_off += 1
+		self.dirty = True
+		self.draw()
+		self.refresh()
+
+	def scroll_up(self):
+		self.line_off -= 1
+		self.line_off = max(0, self.line_off)
+		self.dirty = True
+		self.draw()
+		self.refresh()
+
 class CommandPanel(View):
-	def __init__(self, gdbtui, win):
-		View.__init__(self, gdbtui, win)
+	def __init__(self, gdbtui, parent = None, win = None):
+		View.__init__(self, parent, win)
 		self.app = gdbtui
 		self.win = win
 		
@@ -225,8 +272,8 @@ class CommandPanel(View):
 
 class LogView(View, logging.Handler):
 		
-	def __init__(self, gdbtui, win, log):
-		View.__init__(self, gdbtui, win)
+	def __init__(self, log, parent = None, win = None):
+		View.__init__(self, parent, win)
 		self.win.scrollok(1)
 		maxy, maxx = self.win.getmaxyx()
 		self.win.setscrreg(0, maxy - 1)
@@ -245,8 +292,8 @@ class WatchView(View):
 
 	TAB = 4
 
-	def __init__(self, gdbtui, win):
-		View.__init__(self, gdbtui, win)
+	def __init__(self, gdbtui, parent = None, win = None):
+		View.__init__(self, parent, win)
 		self.app = gdbtui
 		self.dirty = False
 		self.app.sess.onWatchUpdate.subscribe(self.onWatchUpdate)
@@ -275,8 +322,7 @@ class WatchView(View):
 						s = "<%s children>" % v.numchild
 						self.win.addnstr(i, j2, s, max(0, maxx - j2))
 			return i
-		rec(self.app.sess._watch, 0, 0)
-			
+		rec(self.app.sess._watch, 0, 0)	
 
 	def onWatchUpdate(self, v):
 		self.dirty = True
@@ -299,8 +345,8 @@ class TopLevelKeyboardInput(Controller):
 		'q': lambda self: self.app.commandHandler.onQuit(),
 		':': lambda self: self.app.commandHandler.onStartInput(mode='python'),
 		'!': lambda self: self.app.commandHandler.onStartInput(mode='gdb'),
-		'KEY_UP': lambda self: self.app.commandHandler.scrollUp(),
-		'KEY_DOWN': lambda self: self.app.commandHandler.scrollDown(),
+		'KEY_UP': lambda self: self.app.commandHandler.onScrollUp(),
+		'KEY_DOWN': lambda self: self.app.commandHandler.onScrollDown(),
 		'KEY_F(1)': lambda self: None
 	}
 
@@ -326,7 +372,8 @@ class TopLevelKeyboardInput(Controller):
 		return res	
 
 class CommandHandler(object):
-	def __init__(self, gdb, commandPanel):
+	def __init__(self, gdbtui, gdb, commandPanel):
+		self.gdbtui = gdbtui
 		self.gdb = gdb
 		self.commandPanel = commandPanel
 		self.commandQueue = EventQueue(vsync = 1e-3)
@@ -369,9 +416,9 @@ class CommandHandler(object):
 		self.gdb.onProcessed.broadcast()
 	
 	def _onScrollDown(self):
-		pass
+		self.gdbtui.src_view.scroll_down()
 	def _onScrollUp(self):
-		pass
+		self.gdbtui.src_view.scroll_up()
 
 class PyGdbTui(TopLevelView):
 
@@ -384,7 +431,12 @@ class PyGdbTui(TopLevelView):
 		self.topwin = topwin
 		curses.raw()
 		self.topwin.keypad(1)
-	
+		
+		# Color Settings
+		self.settings = Settings()
+		self.settings.apply()
+		self.topwin.bkgd( curses.color_pair(self.settings.PAIR_DEFAULT) )
+		
 		# Views
 		self.layout = LayoutView(self, self.topwin, 'V')
 		self.layout.layout( -.65, -.35, 1 )
@@ -394,15 +446,19 @@ class PyGdbTui(TopLevelView):
 		upper_layout.layout( -.6, -.4 )
 		src_view_win, watch_win = upper_layout._subwins
 		
-		self.src_view_panel = NamedPanel(self, src_view_win, "<source>")
-		self.src_view = SourceFileView(self, self.src_view_panel.client_area)
-		self.log_view = LogView(self, log_view_win, self.log)
-		self.command_panel = CommandPanel(self, command_panel_win)
-		self.watch_panel = NamedPanel(self, watch_win, "watch")
-		self.watch_view = WatchView(self, self.watch_panel.client_area)
-
+		self.src_view_panel = NamedPanel(upper_layout, src_view_win, "<source>")
+		self.src_view = SourceFileView(self)
+		self.src_view_panel.set_inner(self.src_view)
+		
+		self.log_view = LogView(self.log, self.layout, log_view_win)
+		
+		self.command_panel = CommandPanel(self, self.layout, command_panel_win)
+		self.watch_panel = NamedPanel(upper_layout, watch_win, "watch")
+		self.watch_view = WatchView(self)
+		self.watch_panel.set_inner(self.watch_view)
+		
 		# Command handler
-		self.commandHandler = CommandHandler(self.sess, self.command_panel)
+		self.commandHandler = CommandHandler(self, self.sess, self.command_panel)
 		
 		# Events
 		self.onStartCommandInput = EventSlot()
@@ -410,7 +466,7 @@ class PyGdbTui(TopLevelView):
 		# Event Handlers
 		self.sess.onProcessed.subscribe(self.onGdbProcessedResponse)
 		self.scheduled_onGdbProcessedResponse = self.commandHandler.commandQueue.schedule_handler(self._onGdbProcessedResponse)
-
+		
 		# Input
 		self.kb_input = TopLevelKeyboardInput(self, self.topwin)
 
