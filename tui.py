@@ -50,7 +50,7 @@ class Controller(object):
 	pass
 
 class NamedPanel(View):
-	def __init__(self, parent, win, name):
+	def __init__(self, name, parent = None, win = None):
 		View.__init__(self, parent, win)
 		self.name = name
 		self.set_win(parent, win)
@@ -58,8 +58,12 @@ class NamedPanel(View):
 	
 	def set_win(self, parent, win):
 		self._set_win(parent, win)
-		maxy, maxx = self.win.getmaxyx()
-		self.client_area = self.win.derwin(maxy - 2, maxx - 2, 1, 1)
+		if self.win is not None:
+			maxy, maxx = self.win.getmaxyx()
+			self.client_area = self.win.derwin(maxy - 2, maxx - 2, 1, 1)
+			self.set_inner(self.inner)
+		else:
+			self.client_area = None
 	
 	def set_inner(self, inner):
 		if self.inner is not None:
@@ -93,8 +97,13 @@ class LayoutView(View):
 		View.__init__(self, parent, win)
 		self.orientation = orientation.strip().upper()
 		self._sz = []
+		self._views = []
 	
 	def _layout(self):
+
+		if self.win is None:
+			return
+		
 		maxy, maxx = self.win.getmaxyx()
 		if self.orientation == 'H':
 			maxz = maxx
@@ -107,7 +116,7 @@ class LayoutView(View):
 		rel_pos = acc(lambda x,y: x+y, [ rel_rem * (-sz / total_rel) if sz < 0 else 0 for sz in self._sz ], 0)
 		rel_pos = [ int(round(x)) for x in rel_pos ]
 		rel_pos[-1] = rel_rem
-		rel_sz = [ rel_pos[i] - rel_pos[i-1] for i in xrange(1, len(rel_pos))]
+		rel_sz = [ rel_pos[i] - rel_pos[i-1] for i in xrange(1, len(rel_pos)) ]
 		
 		abs_sz = [ sz if sz > 0 else None for sz in self._sz ]
 		
@@ -122,9 +131,16 @@ class LayoutView(View):
 		X0 = list(acc(lambda x,y: x+y, SZ, 0))[:-1]
 		
 		self._subwins = [ subwin(x0, sz) for sz, x0 in zip(SZ, X0) ]
+
+		for v, w in zip(self._views, self._subwins):
+			v.set_win(self, w)
+
+	def set_win(self, parent, win):
+		self._set_win(parent, win)
+		self._layout()
 		
-	def layout(self, *sz):
-		self._sz = list(sz)
+	def layout(self, *sz_v):
+		self._sz, self._views = zip(*sz_v)
 		self._layout()
 
 class Settings(object):
@@ -138,7 +154,6 @@ class Settings(object):
 	def apply(self):
 		curses.init_pair(self.PAIR_DEFAULT, *self.COLOR_DEFAULT)
 		curses.init_pair(self.PAIR_ACTIVE_BORDER, *self.COLOR_ACTIVE_BORDER)
-
 
 class SourceFileView(View):
 
@@ -274,12 +289,17 @@ class LogView(View, logging.Handler):
 		
 	def __init__(self, log, parent = None, win = None):
 		View.__init__(self, parent, win)
-		self.win.scrollok(1)
-		maxy, maxx = self.win.getmaxyx()
-		self.win.setscrreg(0, maxy - 1)
+		self.set_win(parent, win)
 		logging.Handler.__init__(self)
 		self.log = log
 		self.log.addHandler(self)
+
+	def set_win(self, parent, win):
+		if win is not None:
+			win.scrollok(1)
+			maxy, maxx = win.getmaxyx()
+			win.setscrreg(0, maxy - 1)
+		self._set_win(parent, win)
 
 	def emit(self, record):
 		maxy, maxx = self.win.getmaxyx()
@@ -438,25 +458,31 @@ class PyGdbTui(TopLevelView):
 		self.topwin.bkgd( curses.color_pair(self.settings.PAIR_DEFAULT) )
 		
 		# Views
-		self.layout = LayoutView(self, self.topwin, 'V')
-		self.layout.layout( -.65, -.35, 1 )
-		upper_panel, log_view_win, command_panel_win = self.layout._subwins
-		
-		upper_layout = LayoutView(self.layout, upper_panel, 'H')
-		upper_layout.layout( -.6, -.4 )
-		src_view_win, watch_win = upper_layout._subwins
-		
-		self.src_view_panel = NamedPanel(upper_layout, src_view_win, "<source>")
+		self.src_view_panel = NamedPanel("<source>")
 		self.src_view = SourceFileView(self)
 		self.src_view_panel.set_inner(self.src_view)
-		
-		self.log_view = LogView(self.log, self.layout, log_view_win)
-		
-		self.command_panel = CommandPanel(self, self.layout, command_panel_win)
-		self.watch_panel = NamedPanel(upper_layout, watch_win, "watch")
+	
+		self.watch_panel = NamedPanel("watch")
 		self.watch_view = WatchView(self)
 		self.watch_panel.set_inner(self.watch_view)
+	
+		upper_layout = LayoutView(None, None, 'H')
+		upper_layout.layout( 
+			(-.6, self.src_view_panel), 
+			(-.4, self.watch_panel) 
+		)
 		
+		self.log_view = LogView(self.log)
+
+		self.command_panel = CommandPanel(self)
+	
+		self.layout = LayoutView(self, self.topwin, 'V')
+		self.layout.layout( 
+			(-.65, upper_layout),
+			(-.35, self.log_view),
+			(   1, self.command_panel ) 
+		)
+	
 		# Command handler
 		self.commandHandler = CommandHandler(self, self.sess, self.command_panel)
 		
