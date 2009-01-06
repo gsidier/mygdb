@@ -35,6 +35,8 @@ class struct(object):
 		return "struct(%s)" % repr(self._data)
 	def __getitem__(self, i):
 		return self._data[i]
+	def get(self, name, default = None):
+		return self._data.get(name, default)
 
 # ========== PARSER ==========
 
