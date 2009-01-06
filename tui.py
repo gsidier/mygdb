@@ -423,6 +423,7 @@ class TopLevelKeyboardInput(Controller):
 		'q': lambda self: self.app.commandHandler.onQuit(),
 		':': lambda self: self.app.commandHandler.onStartInput(mode='python'),
 		'!': lambda self: self.app.commandHandler.onStartInput(mode='gdb'),
+		';': lambda self: self.app.commandHandler.onStartInput(mode='quick'),
 		'KEY_UP': lambda self: self.app.commandHandler.onScrollUp(),
 		'KEY_DOWN': lambda self: self.app.commandHandler.onScrollDown(),
 		'KEY_F(1)': lambda self: None,
@@ -492,6 +493,8 @@ class CommandHandler(object):
 				res = self.gdb.runCommand(cmd)
 			elif mode == 'gdb':
 				res = self.gdb.runGdbCommand(cmd)
+			elif mode == 'quick':
+				res = self.gdb.runQuickCommand(cmd)
 		except Exception, e:
 			self.commandPanel.disperr(e.message)
 	

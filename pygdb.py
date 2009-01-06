@@ -244,11 +244,21 @@ class GdbSession(object):
 		eval(cmd, {
 			'app': self, 
 			'gdb': self.controller, 
+			'att': self.attach,
 			'b': self.setbreak, 
 			'w': self.var_create, 
 			'log': lambda str: self.log.debug(str) 
 		})
 		self.onProcessed.broadcast()
+	#
+	def runQuickCommand(self, cmd):
+		items = cmd.split()
+		if items == []:
+			raise Exception("Syntax error: Empty command")
+		func = items[0]
+		args = items[1:]
+		pycmd = "%s(%s)" % (func, ', '.join(repr(arg) for arg in args) )
+		self.runCommand(pycmd)
 	#
 	def runGdbCommand(self, cmd):
 		self.controller.raw_send(cmd)
@@ -260,6 +270,8 @@ class GdbSession(object):
 		def on_response(response):
 			self.onFileChanged.broadcast(filename)
 		self.controller.file(filename, on_response=on_response)
+	def attach(self, what):
+		self.controller.target_attach(what)
 	#
 	def setbreak(self, loc=None, cond=None, temp=False, hardware=False, count=None, thread=None, force=False):
 		def on_response(desc):
@@ -288,9 +300,11 @@ class GdbSession(object):
 	def var_create(self, expr):
 		def on_response(response):
 			self.log.debug("VAR CREATE : %s" % response)
-			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.value, numchild = response.numchild, in_scope = True)
+			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.get('value'), numchild = response.numchild, in_scope = True)
 			self._watch[response.name] = v
 			self.log.debug("WATCHLIST : %s" % self._watch)
+			if v.value is None:
+				self.var_eval(v.name)
 			self.var_list_children(response.name)
 			self._update_watch(v)
 		self.controller.var_create(expr, on_response = on_response)
