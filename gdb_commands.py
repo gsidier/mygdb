@@ -151,7 +151,27 @@ class GdbCommandBuilder(object):
 		return self._send("-file-list-symbol-files", token, *args, **kwargs)
 	def symbol_file(self, file, token = None, *args, **kwargs):
 		return self._send("-file-symbol-file %s" % file, token, *args, **kwargs)
-	# Target Manipulation Commands [TODO]
+	# Target Manipulation Commands
+	def target_attach(self, target, token = None, *args, **kwargs):
+		return self._send("-target-attach %s" % target, token, *args, **kwargs)
+	def target_compare_sections(self, section = None, *args, **kwargs):
+		return self._send("-target-compare-sections %s" % ('' if section is None else section), token, *args, **kwargs)
+	def target_detach(self, token = None, *args, **kwargs):
+		return self._send("-target-detach", token, *args, **kwargs)
+	def target_disconnect(self, token = None, *args, **kwargs):
+		return self._send("-target-disconnect", token, *args, **kwargs)
+	def target_download(self, token = None, *args, **kwargs):
+		return self._send("-target-download", token, *args, **kwargs)
+	def target_exec_status(self, token = None, *args, **kwargs):
+		return self._send("-target-exec-status", token, *args, **kwargs)
+	def target_list_available_targets(self, token = None, *args, **kwargs):
+		return self._send("-target-list-available-targets", token, *args, **kwargs)
+	def target_list_current_targets(self, token = None, *args, **kwargs):
+		return self._send("-target-list-current-targets", token, *args, **kwargs)
+	def target_list_params(self, token = None, *args, **kwargs):
+		return self._send("-target-list-parameters", token, *args, **kwargs)
+	def target_select(self, type, params = [], token = None, *args, **kwargs):
+		return self._send("-target select %s %s" % (type, ' '.join(params)), token, *args, **kwargs)
 	# File Transfer Commands [TODO]
 	# Misc Commands
 	def exit(self, token = None, *args, **kwargs):
