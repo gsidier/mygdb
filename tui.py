@@ -17,6 +17,7 @@ class View(object):
 	def __init__(self, parent, win):
 		self.components = set()
 		self._set_win(parent, win)
+		self._has_focus = False
 
 	def _set_win(self, parent, win):
 		"""Sets the parent component and the window (canvas). Do not override."""
@@ -41,6 +42,9 @@ class View(object):
 	
 	def draw(self):
 		pass
+
+	def accept_focus(self):
+		return True
 
 class TopLevelView(View):
 	def __init__(self, win):
@@ -76,9 +80,13 @@ class NamedPanel(View):
 		self.win.refresh()
 	
 	def draw(self):
+		if self._has_focus:
+			self.win.attron(curses.A_BOLD)
 		self.win.border()
 		maxy, maxx = self.win.getmaxyx()
 		self.win.addnstr(0, 1, "[ %s ]" % self.name, max(0, maxx - 1))
+		self.win.attroff(curses.A_BOLD)
+		self.win.attron(curses.A_NORMAL)
 
 def acc(func, seq, initial = None):
 	if initial is not None:
@@ -98,6 +106,8 @@ class LayoutView(View):
 		self.orientation = orientation.strip().upper()
 		self._sz = []
 		self._views = []
+		self._in_focus = None
+		self._active_view = None
 	
 	def _layout(self):
 
@@ -134,7 +144,7 @@ class LayoutView(View):
 
 		for v, w in zip(self._views, self._subwins):
 			v.set_win(self, w)
-
+		
 	def set_win(self, parent, win):
 		self._set_win(parent, win)
 		self._layout()
@@ -142,6 +152,51 @@ class LayoutView(View):
 	def layout(self, *sz_v):
 		self._sz, self._views = zip(*sz_v)
 		self._layout()
+
+	def flip_focus(self, dir = +1, loop = True):
+		"""
+		Flip focus between the inner views.
+		If one of the inner views has a 'flip_focus' functionality, then flip its focus in turn.
+		'dir' is +1 to flip forward, -1 to flip back, and None to reset.
+		'loop' is True if one should flip back to the other end of the stack of views.
+		Return True if still flipping, or False.
+		"""
+		if dir is None:
+			self._in_focus = None
+			self._active_view = None
+			return False
+		n = len(self._views)
+		for count in xrange(n): # try at most once for each inner view
+			if self._in_focus is None:
+				self._in_focus = 0 if dir > 0 else n - 1
+			elif hasattr(self._views[self._in_focus], 'flip_focus'):
+				if not self._views[self._in_focus].flip_focus(dir, False):
+					self._in_focus += int(dir)
+				else:
+					self._active_view = self._views[self._in_focus]._active_view
+					return True
+			else:
+				self._in_focus += int(dir)
+			if (not loop) and (self._in_focus >= n or self._in_focus < 0):
+				self._in_focus = None
+				if self._active_view is not None:
+					self._active_view._has_focus = False
+					self._active_view = None
+				return False
+			self._in_focus = self._in_focus % n
+			v = self._views[self._in_focus]
+			if hasattr(v, 'flip_focus'):
+				v.flip_focus(None)
+				continue
+			elif not v.accept_focus():
+				continue
+			else:
+				if self._active_view is not None:
+					self._active_view._has_focus = False
+				self._active_view = v
+				self._active_view._has_focus = True
+			return True
+		return False
 
 class Settings(object):
 	
@@ -285,6 +340,9 @@ class CommandPanel(View):
 		self.win.addnstr(0, 0, errmsg, max(len(errmsg), maxx))
 		self.win.refresh()
 
+	def accept_focus(self):
+		return False
+
 class LogView(View, logging.Handler):
 		
 	def __init__(self, log, parent = None, win = None):
@@ -367,7 +425,10 @@ class TopLevelKeyboardInput(Controller):
 		'!': lambda self: self.app.commandHandler.onStartInput(mode='gdb'),
 		'KEY_UP': lambda self: self.app.commandHandler.onScrollUp(),
 		'KEY_DOWN': lambda self: self.app.commandHandler.onScrollDown(),
-		'KEY_F(1)': lambda self: None
+		'KEY_F(1)': lambda self: None,
+		'\t': lambda self: self.app.commandHandler.onFlipFocus(+1),
+		'KEY_BTAB': lambda self: self.app.commandHandler.onFlipFocus(-1),
+		'KEY_F(2)': lambda self: self.app.commandHandler.onFlipFocus(+1)
 	}
 
 	def _poll(self):
@@ -410,6 +471,8 @@ class CommandHandler(object):
 		self.onScrollUp = self.commandQueue.schedule_handler(self._onScrollUp)
 		self.onScrollDown = self.commandQueue.schedule_handler(self._onScrollDown)
 		
+		self.onFlipFocus = self.commandQueue.schedule_handler(self._onFlipFocus)
+
 	def _onRun(self):
 		self.gdb.run()
 	def _onContinue(self):
@@ -439,6 +502,11 @@ class CommandHandler(object):
 		self.gdbtui.src_view.scroll_down()
 	def _onScrollUp(self):
 		self.gdbtui.src_view.scroll_up()
+
+	def _onFlipFocus(self, dir):
+		self.gdbtui.log.debug("TOGGLING FOCUS")
+		self.gdbtui.layout.flip_focus(dir, True)
+		self.gdbtui.log.debug("ACTIVE VIEW : %s" % self.gdbtui.layout._active_view)
 
 class PyGdbTui(TopLevelView):
 
