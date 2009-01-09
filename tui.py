@@ -161,6 +161,7 @@ class LayoutView(View):
 
 	def resize(self):
 		self._layout()
+		View.resize(self)
 
 	def flip_focus(self, dir = +1, loop = True):
 		"""
@@ -433,6 +434,7 @@ class TopLevelKeyboardInput(Controller):
 		':': lambda self: self.app.commandHandler.onStartInput(mode='python'),
 		'!': lambda self: self.app.commandHandler.onStartInput(mode='gdb'),
 		';': lambda self: self.app.commandHandler.onStartInput(mode='quick'),
+		'KEY_ESC': lambda self: self.app.commandHandler.onStartPythonShell(),
 		'KEY_RESIZE': lambda self: self.app.commandHandler.onResize(),
 		'KEY_UP': lambda self: self.app.commandHandler.onScrollUp(),
 		'KEY_DOWN': lambda self: self.app.commandHandler.onScrollDown(),
@@ -476,7 +478,7 @@ class CommandHandler(object):
 		self.onBreak = self.commandQueue.schedule_handler(self._onBreak)
 		self.onQuit = self.commandQueue.schedule_handler(self._onQuit)
 		self.onStartInput = self.commandQueue.schedule_handler(self._onStartInput)
-	
+		self.onStartPythonShell = self.commandQueue.schedule_handler(self._onStartPythonShell)
 		self.onProcessed = self.commandQueue.schedule_handler(self._onProcessed)
 
 		self.onResize = self.commandQueue.schedule_handler(self._onResize)
@@ -525,6 +527,9 @@ class CommandHandler(object):
 		self.gdbtui.log.debug("TOGGLING FOCUS")
 		self.gdbtui.layout.flip_focus(dir, True)
 		self.gdbtui.log.debug("ACTIVE VIEW : %s" % self.gdbtui.layout._active_view)
+
+	def _onStartPythonShell(self):
+		pass
 
 class PyGdbTui(TopLevelView):
 
