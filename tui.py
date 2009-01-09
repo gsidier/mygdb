@@ -46,6 +46,12 @@ class View(object):
 	def accept_focus(self):
 		return True
 
+	def resize(self):
+		self.win.erase()
+		for c in self.components:
+			c.resize()
+		self.draw()
+
 class TopLevelView(View):
 	def __init__(self, win):
 		View.__init__(self, None, win)
@@ -151,6 +157,9 @@ class LayoutView(View):
 		
 	def layout(self, *sz_v):
 		self._sz, self._views = zip(*sz_v)
+		self._layout()
+
+	def resize(self):
 		self._layout()
 
 	def flip_focus(self, dir = +1, loop = True):
@@ -424,6 +433,7 @@ class TopLevelKeyboardInput(Controller):
 		':': lambda self: self.app.commandHandler.onStartInput(mode='python'),
 		'!': lambda self: self.app.commandHandler.onStartInput(mode='gdb'),
 		';': lambda self: self.app.commandHandler.onStartInput(mode='quick'),
+		'KEY_RESIZE': lambda self: self.app.commandHandler.onResize(),
 		'KEY_UP': lambda self: self.app.commandHandler.onScrollUp(),
 		'KEY_DOWN': lambda self: self.app.commandHandler.onScrollDown(),
 		'KEY_F(1)': lambda self: None,
@@ -468,6 +478,8 @@ class CommandHandler(object):
 		self.onStartInput = self.commandQueue.schedule_handler(self._onStartInput)
 	
 		self.onProcessed = self.commandQueue.schedule_handler(self._onProcessed)
+
+		self.onResize = self.commandQueue.schedule_handler(self._onResize)
 	
 		self.onScrollUp = self.commandQueue.schedule_handler(self._onScrollUp)
 		self.onScrollDown = self.commandQueue.schedule_handler(self._onScrollDown)
@@ -501,6 +513,9 @@ class CommandHandler(object):
 	def _onProcessed(self):
 		self.gdb.onProcessed.broadcast()
 	
+	def _onResize(self):
+		self.gdbtui.handleResize()
+
 	def _onScrollDown(self):
 		self.gdbtui.src_view.scroll_down()
 	def _onScrollUp(self):
@@ -520,7 +535,6 @@ class PyGdbTui(TopLevelView):
 		self.sess = pygdb.GdbSession(gdb)
 		self.log = logging.getLogger('gdb')
 		self.topwin = topwin
-		curses.raw()
 		self.topwin.keypad(1)
 		
 		# Color Settings
@@ -573,6 +587,9 @@ class PyGdbTui(TopLevelView):
 		self.log.debug("### REFRESH ###")
 		self.update()
 		self.refresh()
+
+	def handleResize(self):
+		self.layout.resize()
 
 if __name__ == '__main__':
 	
