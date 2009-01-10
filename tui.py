@@ -16,37 +16,66 @@ class View(object):
 
 	def __init__(self, parent, win):
 		self.components = set()
-		self._set_win(parent, win)
+		self._setwin(win)
+		self._setparent(parent)
 		self._has_focus = False
 
-	def _set_win(self, parent, win):
-		"""Sets the parent component and the window (canvas). Do not override."""
+	def _setwin(self, win):
+		"""Sets the window (canvas). Do not redefine this method."""
 		self.win = win
+		
+	def _setparent(self, parent):
+		"""Sets the parent view. Do not redefine this method."""
 		self.parent = parent
 		if self.parent is not None:
 			self.parent.components.add(self)
 
-	def set_win(self, parent, win):
-		"""Resets the parent component and the window (canvas). This function may be overridden."""
-		self._set_win(parent, win)
+	def setwin(self, win):
+		"""Sets the window (canvas). This function may be redefined by subclasses."""
+		self._setwin(win)
+
+	def setparent(self, parent):
+		"""Sets the parent view. This function may be redefined by subclasses."""
+		self._setparent(parent) 
+
+	def delwin(self):
+		"""
+		Removes this view's window.
+		"""
+		for c in self.components:
+			c.delwin()
+		self.win = None
 
 	def update(self):
+		"""
+		Redraw the view and its subcomponents to the content buffer.
+		Recursively calls draw() on this view and it's subviews.
+		"""
 		for c in self.components:
 			c.update()
 		self.draw()
 	
 	def refresh(self):
+		"""
+		Perform a win.refresh on this view's and it's subviews' windows, displaying the content buffers to the screen.
+		"""
 		self.win.refresh()
 		for c in self.components:
 			c.refresh()
 	
 	def draw(self):
+		"""
+		Draw the view to the content buffer.
+		"""
 		pass
 
 	def accept_focus(self):
 		return True
 
 	def resize(self):
+		"""
+		Called when the window size has changed.
+		"""
 		self.win.erase()
 		for c in self.components:
 			c.resize()
@@ -63,11 +92,11 @@ class NamedPanel(View):
 	def __init__(self, name, parent = None, win = None):
 		View.__init__(self, parent, win)
 		self.name = name
-		self.set_win(parent, win)
+		self.setwin(win)
 		self.inner = None
 	
-	def set_win(self, parent, win):
-		self._set_win(parent, win)
+	def setwin(self, win):
+		self._setwin(win)
 		if self.win is not None:
 			maxy, maxx = self.win.getmaxyx()
 			self.client_area = self.win.derwin(maxy - 2, maxx - 2, 1, 1)
@@ -80,7 +109,8 @@ class NamedPanel(View):
 			self.components.remove(self.inner)
 		self.inner = inner
 		if self.inner is not None:
-			self.inner.set_win(self, self.client_area)
+			self.inner.setparent(self)
+			self.inner.setwin(self.client_area)
 	
 	def refresh(self):
 		self.win.refresh()
@@ -149,10 +179,11 @@ class LayoutView(View):
 		self._subwins = [ subwin(x0, sz) for sz, x0 in zip(SZ, X0) ]
 
 		for v, w in zip(self._views, self._subwins):
-			v.set_win(self, w)
+			v.setparent(self)
+			v.setwin(w)
 		
-	def set_win(self, parent, win):
-		self._set_win(parent, win)
+	def setwin(self, win):
+		self._setwin(win)
 		self._layout()
 		
 	def layout(self, *sz_v):
@@ -227,7 +258,8 @@ class SourceFileView(View):
 	def __init__(self, gdbtui, parent = None, win = None):
 		View.__init__(self, parent, win)
 
-		self.app = gdbtui
+		self.app = gdbtui.app
+		self.gdbtui = gdbtui
 		self.log = logging.getLogger("gdb")
 
 		self.line_off = 0
@@ -306,7 +338,7 @@ class SourceFileView(View):
 		log.debug("EVENT : SourceFileView << onFrameChange")
 		if hasattr(frame, 'file'):
 			self.update_src_file(frame.file)
-			self.app.src_view_panel.name = frame.file
+			self.gdbtui.src_view_panel.name = frame.file
 		if hasattr(frame, 'line'):
 			self.src_line = int(frame.line)
 			self.log.debug("CURRENT LINE : %d" % self.src_line)
@@ -329,14 +361,15 @@ class SourceFileView(View):
 class CommandPanel(View):
 	def __init__(self, gdbtui, parent = None, win = None):
 		View.__init__(self, parent, win)
-		self.app = gdbtui
+		self.app = gdbtui.app
+		self.gdbtui = gdbtui
 		self.win = win
 		
 	def input(self):
 		self.win.clear()
 		curses.curs_set(1)
 		curses.echo()
-		cmd = self.app.kb_input.get_focus(lambda: self.win.getstr())
+		cmd = self.gdbtui.kb_input.get_focus(lambda: self.win.getstr())
 		curses.noecho()
 		curses.curs_set(0)
 		return cmd
@@ -357,17 +390,17 @@ class LogView(View, logging.Handler):
 		
 	def __init__(self, log, parent = None, win = None):
 		View.__init__(self, parent, win)
-		self.set_win(parent, win)
+		self.setwin(win)
 		logging.Handler.__init__(self)
 		self.log = log
 		self.log.addHandler(self)
 
-	def set_win(self, parent, win):
+	def setwin(self, win):
 		if win is not None:
 			win.scrollok(1)
 			maxy, maxx = win.getmaxyx()
 			win.setscrreg(0, maxy - 1)
-		self._set_win(parent, win)
+		self._setwin(win)
 
 	def emit(self, record):
 		maxy, maxx = self.win.getmaxyx()
@@ -382,7 +415,8 @@ class WatchView(View):
 
 	def __init__(self, gdbtui, parent = None, win = None):
 		View.__init__(self, parent, win)
-		self.app = gdbtui
+		self.app = gdbtui.app
+		self.gdbtui = gdbtui
 		self.dirty = False
 		self.app.sess.onWatchUpdate.subscribe(self.onWatchUpdate)
 	
@@ -417,7 +451,8 @@ class WatchView(View):
 
 class TopLevelKeyboardInput(Controller):
 	def __init__(self, gdbtui, win):
-		self.app = gdbtui
+		self.app = gdbtui.app
+		self.gdbtui = gdbtui
 		self.win = win
 		self._process = True
 		self.kb_poll_thread = threading.Thread(target = self._poll)
@@ -425,23 +460,23 @@ class TopLevelKeyboardInput(Controller):
 		self.kb_poll_thread.start()
 
 	ACTIONS = {
-		'R': lambda self: self.app.commandHandler.onRun(),
-		'C': lambda self: self.app.commandHandler.onContinue(),
-		'n': lambda self: self.app.commandHandler.onNext(),
-		's': lambda self: self.app.commandHandler.onStep(),
-		'b': lambda self: self.app.commandHandler.onBreak(),
-		'q': lambda self: self.app.commandHandler.onQuit(),
-		':': lambda self: self.app.commandHandler.onStartInput(mode='python'),
-		'!': lambda self: self.app.commandHandler.onStartInput(mode='gdb'),
-		';': lambda self: self.app.commandHandler.onStartInput(mode='quick'),
-		'KEY_ESC': lambda self: self.app.commandHandler.onStartPythonShell(),
-		'KEY_RESIZE': lambda self: self.app.commandHandler.onResize(),
-		'KEY_UP': lambda self: self.app.commandHandler.onScrollUp(),
-		'KEY_DOWN': lambda self: self.app.commandHandler.onScrollDown(),
+		'R': lambda self: self.gdbtui.commandHandler.onRun(),
+		'C': lambda self: self.gdbtui.commandHandler.onContinue(),
+		'n': lambda self: self.gdbtui.commandHandler.onNext(),
+		's': lambda self: self.gdbtui.commandHandler.onStep(),
+		'b': lambda self: self.gdbtui.commandHandler.onBreak(),
+		'q': lambda self: self.gdbtui.commandHandler.onQuit(),
+		':': lambda self: self.gdbtui.commandHandler.onStartInput(mode='python'),
+		'!': lambda self: self.gdbtui.commandHandler.onStartInput(mode='gdb'),
+		';': lambda self: self.gdbtui.commandHandler.onStartInput(mode='quick'),
+		'o': lambda self: self.gdbtui.commandHandler.onStartPythonShell(),
+		'KEY_RESIZE': lambda self: self.gdbtui.commandHandler.onResize(),
+		'KEY_UP': lambda self: self.gdbtui.commandHandler.onScrollUp(),
+		'KEY_DOWN': lambda self: self.gdbtui.commandHandler.onScrollDown(),
 		'KEY_F(1)': lambda self: None,
-		'\t': lambda self: self.app.commandHandler.onFlipFocus(+1),
-		'KEY_BTAB': lambda self: self.app.commandHandler.onFlipFocus(-1),
-		'KEY_F(2)': lambda self: self.app.commandHandler.onFlipFocus(+1)
+		'\t': lambda self: self.gdbtui.commandHandler.onFlipFocus(+1),
+		'KEY_BTAB': lambda self: self.gdbtui.commandHandler.onFlipFocus(-1),
+		'KEY_F(2)': lambda self: self.gdbtui.commandHandler.onFlipFocus(+1)
 	}
 
 	def _poll(self):
@@ -453,7 +488,7 @@ class TopLevelKeyboardInput(Controller):
 					log.debug("KEY PRESSED : '%s'" % c)
 					if self.ACTIONS.has_key(c):
 						self.ACTIONS[c](self)
-						self.app.commandHandler.onProcessed()
+						self.gdbtui.commandHandler.onProcessed()
 				except:
 					pass
 			else:
@@ -467,6 +502,7 @@ class TopLevelKeyboardInput(Controller):
 
 class CommandHandler(object):
 	def __init__(self, gdbtui, gdb, commandPanel):
+		self.app = gdbtui.app
 		self.gdbtui = gdbtui
 		self.gdb = gdb
 		self.commandPanel = commandPanel
@@ -499,7 +535,7 @@ class CommandHandler(object):
 	def _onBreak(self):
 		self.gdb.setbreak(loc='main')
 	def _onQuit(self):
-		self.commandQueue.process = False
+		self.app.quit()
 	def _onStartInput(self, mode):
 		cmd = self.commandPanel.input()
 		try:
@@ -529,15 +565,17 @@ class CommandHandler(object):
 		self.gdbtui.log.debug("ACTIVE VIEW : %s" % self.gdbtui.layout._active_view)
 
 	def _onStartPythonShell(self):
-		pass
+		self.app.switch_mode('PYSHELL')
 
 class PyGdbTui(TopLevelView):
 
-	def __init__(self, gdb, topwin):
+	def __init__(self, app, topwin):
 		TopLevelView.__init__(self, topwin)
 		
-		self.gdb = gdb
-		self.sess = pygdb.GdbSession(gdb)
+		self.app = app	
+		self.gdb = app.gdb
+		self.sess = app.sess
+
 		self.log = logging.getLogger('gdb')
 		self.topwin = topwin
 		self.topwin.keypad(1)
@@ -596,36 +634,85 @@ class PyGdbTui(TopLevelView):
 	def handleResize(self):
 		self.layout.resize()
 
+
+	def process_events(self):
+		self.kb_input._process = True
+		self.commandHandler.commandQueue.process = True
+		self.commandHandler.commandQueue.run()
+
+	def stop_events(self):
+		self.kb_input._process = False
+		self.commandHandler.commandQueue.process = False
+
+class App(object):
+	def __init__(self, gdb):
+		self.gdb = gdb
+		self.sess = pygdb.GdbSession(gdb)
+		
+		self.log = logging.getLogger('gdb')
+		self.appmode = 'TUI' # one of: TUI, PYSHELL, ...
+
+		self.gdbtui = None
+	
+	def run(self):
+		while self.appmode != 'QUIT':
+			if self.appmode == 'TUI':
+				wrapper(self.run_tui)
+			elif self.appmode == 'PYSHELL':
+				self.run_pyshell()
+
+	def quit(self):
+		if self.appmode == 'TUI':
+			self.gdbtui.stop_events()
+		self.appmode = 'QUIT'
+	
+	def run_tui(self, win):
+		if self.gdbtui is None:
+			self.gdbtui = PyGdbTui(self, win)
+		else:
+			self.gdbtui.setwin(win)
+		self.gdbtui.process_events()
+
+	def run_pyshell(self):
+		from IPython.Shell import IPShellEmbed
+		ipshell = IPShellEmbed()
+		ipshell()
+		self.appmode = 'TUI' # return to TUI mode
+
+	def switch_mode(self, mode):
+		if self.appmode == 'TUI' and mode <> 'TUI':
+			self.gdbtui.stop_events()
+		self.appmode = mode
+
 if __name__ == '__main__':
 	
 	log = logging.getLogger("gdb")
 	log.addHandler(logging.FileHandler("session.log"))
 	log.setLevel(logging.DEBUG)
 
+	xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", "session.log"])
 
-	def run(win):
-		gdb = pygdb.GdbMI()
-		app = PyGdbTui(gdb, win)
-		#
-		app.sess.file('hello')
-		#
-		"""
-		fifo_path = 'fifo1'
-		log.debug("MAKING FIFO")
-		os.mkfifo(fifo_path)
+	gdb = pygdb.GdbMI()
+	app = App(gdb)
+	#
+	app.sess.file('hello')
+	#
+	app.run()
 
-		log.debug("SPAWNING OBS")
-		xterm = subprocess.Popen(["xterm", "+hold", "-e", "python", "obstest.py", fifo_path])
-		log.debug("SPAWNED OBS")
-		log.debug("CREATING FIFO")
-		fifo = file(fifo_path, 'w')
-		log.debug("CREATED FIFO")
 
-		stub = piped_event.Stub(fifo)
-		stub.subscribe(app.sess.onProcessed, 'onProcessed')
-		"""
-		#
-		app.commandHandler.commandQueue.run()
+	"""
+	fifo_path = 'fifo1'
+	log.debug("MAKING FIFO")
+	os.mkfifo(fifo_path)
 
-	wrapper(run)
+	log.debug("SPAWNING OBS")
+	xterm = subprocess.Popen(["xterm", "+hold", "-e", "python", "obstest.py", fifo_path])
+	log.debug("SPAWNED OBS")
+	log.debug("CREATING FIFO")
+	fifo = file(fifo_path, 'w')
+	log.debug("CREATED FIFO")
+
+	stub = piped_event.Stub(fifo)
+	stub.subscribe(app.sess.onProcessed, 'onProcessed')
+	"""
 
