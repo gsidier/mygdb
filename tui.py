@@ -335,9 +335,14 @@ class SourceFileView(View):
 	def onFrameChange(self, frame):
 		self.dirty = True
 		log.debug("EVENT : SourceFileView << onFrameChange")
-		if hasattr(frame, 'file'):
+		if hasattr(frame, 'fullname'):
+			self.update_src_file(frame.fullname)
+		elif hasattr(frame, 'file'):
 			self.update_src_file(frame.file)
+		if hasattr(frame, 'file'):
 			self.gdbtui.src_view_panel.name = frame.file
+		elif hasattr(frame, 'fullname'):
+			self.gdbtui.src_view_panel.name = frame.fullname
 		if hasattr(frame, 'line'):
 			self.src_line = int(frame.line)
 			self.log.debug("CURRENT LINE : %d" % self.src_line)
