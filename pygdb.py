@@ -5,6 +5,7 @@ import threading
 import time
 import collections
 import logging
+from collections import defaultdict
 
 import recparse
 import gdbmi_output_parser
@@ -106,6 +107,16 @@ class WatchedVar(object):
 	def __str__(self):
 		return self.__repr__()
 
+def VarWatcher(object):
+	def __init__(self, gdbsess, var_name):
+		self.gdbsess = gdbsess
+		self.var_name = var_name
+		self.var = gdbsess.get_watched_var(self.var_name)
+		self.gdbsess.add_var_watcher(self.var_name, self)
+
+	def __del__(self, gdbsess):
+		self.gdbsess.remove_var_watcher(self.var_name, self)
+
 class GdbSession(object):
 
 	class MyGdbController(GdbController):
@@ -134,6 +145,7 @@ class GdbSession(object):
 		self._response_handlers = {}
 		
 		self._watch = {}
+		self._var_watchers = defaultdict(lambda : set())
 		
 		# State data
 		self.threadid = None
@@ -200,7 +212,7 @@ class GdbSession(object):
 	def _update_frame(self, frame):
 		self.onFrameChange.broadcast(frame)
 
-	def _get_watched_var(self, path):
+	def get_watched_var(self, path):
 		path = path.split('.')
 		children = self._watch
 		v = None
@@ -214,6 +226,12 @@ class GdbSession(object):
 
 	def _update_watch(self, v):
 		self.onWatchUpdate.broadcast(v)
+
+	def add_var_watcher(self, var, watcher):
+		self._var_watchers[var].add(watcher)
+
+	def remove_var_watcher(self, var, watcher):
+		self._var_watchers[var].remove(watcher)
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
@@ -245,7 +263,8 @@ class GdbSession(object):
 			'app': self, 
 			'gdb': self.controller, 
 			'att': self.attach,
-			'b': self.setbreak, 
+			'b': self.setbreak,
+			'f': self.file, 
 			'w': self.var_create, 
 			'log': lambda str: self.log.debug(str) 
 		})
@@ -266,7 +285,8 @@ class GdbSession(object):
 
 	# ========== MAIN INTERFACE ==========
 	#
-	def file(self, filename):
+	def file(self, filename, *args):
+		self.controller.set_args(args)
 		def on_response(response):
 			self.onFileChanged.broadcast(filename)
 		self.controller.file(filename, on_response=on_response)
@@ -313,7 +333,7 @@ class GdbSession(object):
 			self.log.debug("VAR UPDATE : %s" % response)
 			if hasattr(response, 'changelist') and hasattr(response.changelist, '__iter__'):
 				for upd in response.changelist:
-					v = self._get_watched_var(upd.name)
+					v = self.get_watched_var(upd.name)
 					if v is not None:
 						if hasattr(upd, 'value'):
 							v.value = upd.value
@@ -324,7 +344,7 @@ class GdbSession(object):
 		self.controller.var_update(on_response = on_response)
 	def var_list_children(self, name):
 		def on_response(response):
-			v = self._get_watched_var(name)
+			v = self.get_watched_var(name)
 			if v is not None and hasattr(response, 'children'):
 				v.children = {}
 				for tag,child in response.children:
@@ -333,7 +353,7 @@ class GdbSession(object):
 		self.controller.var_list_children(name, on_response = on_response)
 	def var_eval(self, name):
 		def on_response(response):
-			v = self._get_watched_var(name)
+			v = self.get_watched_var(name)
 			if v is not None:
 				v.value = response.value
 				self._update_watch(v)
