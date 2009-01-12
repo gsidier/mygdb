@@ -287,7 +287,6 @@ class SourceFileView(View):
 
 	def draw(self):
 		if self.dirty and self.win is not None: 
-			curses.curs_set(0)
 			maxy, maxx = self.win.getmaxyx()
 			self.win.clear()
 			# if src_line is of the screen then recenter view so that src_line is approx 1/5th down from top of screen
@@ -470,13 +469,14 @@ class TopLevelKeyboardInput(Controller):
 		'!': lambda self: self.gdbtui.commandHandler.onStartInput(mode='gdb'),
 		';': lambda self: self.gdbtui.commandHandler.onStartInput(mode='quick'),
 		'o': lambda self: self.gdbtui.commandHandler.onStartPythonShell(),
+		'KEY_F(2)': lambda self: self.gdbtui.commandHandler.onStartShell(),
+		'KEY_F(10)': lambda self: self.gdbtui.commandHandler.onPopoutLog(),
 		'KEY_RESIZE': lambda self: self.gdbtui.commandHandler.onResize(),
 		'KEY_UP': lambda self: self.gdbtui.commandHandler.onScrollUp(),
 		'KEY_DOWN': lambda self: self.gdbtui.commandHandler.onScrollDown(),
 		'KEY_F(1)': lambda self: None,
 		'\t': lambda self: self.gdbtui.commandHandler.onFlipFocus(+1),
 		'KEY_BTAB': lambda self: self.gdbtui.commandHandler.onFlipFocus(-1),
-		'KEY_F(2)': lambda self: self.gdbtui.commandHandler.onFlipFocus(+1)
 	}
 
 	def _poll(self):
@@ -515,6 +515,8 @@ class CommandHandler(object):
 		self.onQuit = self.commandQueue.schedule_handler(self._onQuit)
 		self.onStartInput = self.commandQueue.schedule_handler(self._onStartInput)
 		self.onStartPythonShell = self.commandQueue.schedule_handler(self._onStartPythonShell)
+		self.onStartShell = self.commandQueue.schedule_handler(self._onStartShell)
+
 		self.onProcessed = self.commandQueue.schedule_handler(self._onProcessed)
 
 		self.onResize = self.commandQueue.schedule_handler(self._onResize)
@@ -523,6 +525,8 @@ class CommandHandler(object):
 		self.onScrollDown = self.commandQueue.schedule_handler(self._onScrollDown)
 		
 		self.onFlipFocus = self.commandQueue.schedule_handler(self._onFlipFocus)
+
+		self.onPopoutLog = self.commandQueue.schedule_handler(self._onPopoutLog)
 
 	def _onRun(self):
 		self.gdb.run()
@@ -566,6 +570,12 @@ class CommandHandler(object):
 
 	def _onStartPythonShell(self):
 		self.app.switch_mode('PYSHELL')
+
+	def _onStartShell(self):
+		self.app.switch_mode('SHELL')
+
+	def _onPopoutLog(self):
+		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", "session.log"])
 
 class PyGdbTui(TopLevelView):
 
@@ -650,7 +660,7 @@ class App(object):
 		self.sess = pygdb.GdbSession(gdb)
 		
 		self.log = logging.getLogger('gdb')
-		self.appmode = 'TUI' # one of: TUI, PYSHELL, ...
+		self.appmode = 'TUI' # one of: TUI, PYSHELL, SHELL, ...
 
 		self.gdbtui = None
 	
@@ -660,6 +670,8 @@ class App(object):
 				wrapper(self.run_tui)
 			elif self.appmode == 'PYSHELL':
 				self.run_pyshell()
+			elif self.appmode == 'SHELL':
+				self.run_shell()
 
 	def quit(self):
 		if self.appmode == 'TUI':
@@ -667,6 +679,7 @@ class App(object):
 		self.appmode = 'QUIT'
 	
 	def run_tui(self, win):
+		curses.curs_set(0)
 		if self.gdbtui is None:
 			self.gdbtui = PyGdbTui(self, win)
 		else:
@@ -679,6 +692,11 @@ class App(object):
 		ipshell()
 		self.appmode = 'TUI' # return to TUI mode
 
+	def run_shell(self):
+		shell = os.environ['SHELL']
+		os.system(shell)
+		self.appmode = 'TUI'
+
 	def switch_mode(self, mode):
 		if self.appmode == 'TUI' and mode <> 'TUI':
 			self.gdbtui.stop_events()
@@ -690,7 +708,6 @@ if __name__ == '__main__':
 	log.addHandler(logging.FileHandler("session.log"))
 	log.setLevel(logging.DEBUG)
 
-	xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", "session.log"])
 
 	gdb = pygdb.GdbMI()
 	app = App(gdb)
