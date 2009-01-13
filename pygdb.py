@@ -107,15 +107,30 @@ class WatchedVar(object):
 	def __str__(self):
 		return self.__repr__()
 
-def VarWatcher(object):
-	def __init__(self, gdbsess, var_name):
+class VarWatcher(object):
+	def __init__(self, gdbsess, var, type):
+		self.TYPE = type
 		self.gdbsess = gdbsess
-		self.var_name = var_name
-		self.var = gdbsess.get_watched_var(self.var_name)
-		self.gdbsess.add_var_watcher(self.var_name, self)
+		self.var = var
+		self.gdbsess.add_var_watcher(self.var, self)
 
-	def __del__(self, gdbsess):
-		self.gdbsess.remove_var_watcher(self.var_name, self)
+	def __del__(self):
+		self.gdbsess.remove_var_watcher(self.var, self)
+
+	def onUpdate(self, var):
+		pass
+
+class PlainWatch(VarWatcher):
+
+	def __init__(self, gdbsess, var):
+		VarWatcher.__init__(self, gdbsess, var, 'default')
+	
+	def onUpdate(self, var, upd):
+		if var is not None:
+			if hasattr(upd, 'value'):
+				var.value = upd.value
+			if hasattr(upd, 'in_scope'):
+				var.in_scope = upd.in_scope == 'true'
 
 class GdbSession(object):
 
@@ -145,7 +160,8 @@ class GdbSession(object):
 		self._response_handlers = {}
 		
 		self._watch = {}
-		self._var_watchers = defaultdict(lambda : set())
+		self._watchers = defaultdict(lambda: {})
+		self._watcher_slots = defaultdict(lambda: EventSlot())
 		
 		# State data
 		self.threadid = None
@@ -227,11 +243,23 @@ class GdbSession(object):
 	def _update_watch(self, v):
 		self.onWatchUpdate.broadcast(v)
 
+	def _update_var(self, v, upd):
+		root = v.name.split('.')[0]
+		if root in self._watcher_slots:
+			self._watcher_slots[root].broadcast(v, upd)
+		self._update_watch(v)
+	
 	def add_var_watcher(self, var, watcher):
-		self._var_watchers[var].add(watcher)
+		root = var.name.split('.')[0]
+		self._watcher_slots[root].subscribe(watcher.onUpdate)
+		self._watchers[watcher.TYPE][root] = watcher
 
 	def remove_var_watcher(self, var, watcher):
-		self._var_watchers[var].remove(watcher)
+		root = var.name.split('.')[0]
+		if root in self._watcher_slots:
+			self._watcher_slots.unsubscribe(watcher.onUpdate)
+		if (watcher.TYPE in self._watchers) and (root in self._watchers[watcher.TYPE]):
+			self._watchers.pop(watcher.TYPE)
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
@@ -321,11 +349,12 @@ class GdbSession(object):
 		def on_response(response):
 			self.log.debug("VAR CREATE : %s" % response)
 			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.get('value'), numchild = response.numchild, in_scope = True)
-			self._watch[response.name] = v
+			w = PlainWatch(self, v)
+			self._watch[v.name] = v
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			if v.value is None:
 				self.var_eval(v.name)
-			self.var_list_children(response.name)
+			self.var_list_children(v.name)
 			self._update_watch(v)
 		self.controller.var_create(expr, on_response = on_response)
 	def var_update(self):
@@ -334,13 +363,7 @@ class GdbSession(object):
 			if hasattr(response, 'changelist') and hasattr(response.changelist, '__iter__'):
 				for upd in response.changelist:
 					v = self.get_watched_var(upd.name)
-					if v is not None:
-						if hasattr(upd, 'value'):
-							v.value = upd.value
-							self.log.debug("WATCHED VAR : %s" % v)
-							self._update_watch(v)
-						if hasattr(upd, 'in_scope'):
-							v.in_scope = upd.in_scope == 'true'
+					self._update_var(v, upd)
 		self.controller.var_update(on_response = on_response)
 	def var_list_children(self, name):
 		def on_response(response):
@@ -356,7 +379,7 @@ class GdbSession(object):
 			v = self.get_watched_var(name)
 			if v is not None:
 				v.value = response.value
-				self._update_watch(v)
+				self._update_var(v, response)
 		self.controller.var_eval(name, on_response = on_response)
 
 if __name__ == '__main__':
