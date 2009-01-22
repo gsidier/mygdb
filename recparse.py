@@ -308,6 +308,15 @@ class Lexer(object):
 def DelimitedList(parser, sep):
 	return (parser + (sep + parser) * (0,)).set_result(lambda tok,val: [val[0]] + [ val[1][i][1] for i in xrange(len(val[1])) ])
 
+def CharRange(a, z):
+	return CharacterClass(''.join(chr(i) for i in xrange(ord(a), ord(z) + 1)))
+
+ALPHA_LOWER = CharRange('a', 'z')
+ALPHA_UPPER = CharRange('A', 'Z')
+ALPHA = ALPHA_LOWER | ALPHA_UPPER
+DIGIT = CharRange('0', '9')
+ALPHANUM = ALPHA | DIGIT
+
 if __name__ == '__main__':
 	pass
 
