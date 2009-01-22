@@ -435,18 +435,27 @@ class WatchView(View):
 					continue
 				if i > maxy:
 					break
-				s = "%s : %s" % (v.expr, v.value)
+				childrenicon = ""
+				if v.children is None:
+					if v.numchild > 0:
+						childrenicon = "[+] " 
+				else:
+					if v.numchild > 0:
+						childrenicon = "[-] "
+				s = "%s%s : %s (%s)" % (childrenicon, v.expr, v.value, v.type)
 				self.win.addnstr(i, j, s, max(0, maxx - j) )
 				i += 1
 				if v.children is not None:
 					i = rec(v.children, i, j + self.TAB)
+				"""
 				else:
 					if v.numchild > 0:
 						if i > maxy:
 							break
 						j2 = j + self.TAB
 						s = "<%s children>" % v.numchild
-						self.win.addnstr(i, j2, s, max(0, maxx - j2))
+						self.win.addnstr(i, j2, s, max(0, maxx - j2))	
+				"""
 			return i
 		rec(self.app.sess._watch, 0, 0)	
 
