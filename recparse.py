@@ -1,5 +1,6 @@
 from __future__ import with_statement
 from collections import deque
+from StringIO import StringIO
 
 class TokenStream(object):
 	def __init__(self, stream):
@@ -305,11 +306,30 @@ class Lexer(object):
 				raise SyntaxError("")
 		return TokenStream(gen())
 
+class Group(Parser):
+	def __init__(self, base):
+		self.base = base
+	def _try_parse(self, stream):
+		return self.base._try_parse(stream)
+	
+
 def DelimitedList(parser, sep):
-	return (parser + (sep + parser) * (0,)).set_result(lambda tok,val: [val[0]] + [ val[1][i][1] for i in xrange(len(val[1])) ])
+	return (Group(parser) + (sep + Group(parser)) * (0,)).set_result(lambda tok,val: [val[0]] + [ val[1][i][1] for i in xrange(len(val[1])) ])
 
 def CharRange(a, z):
 	return CharacterClass(''.join(chr(i) for i in xrange(ord(a), ord(z) + 1)))
+
+
+def flatten_chars(toks, value):
+	buf = StringIO()
+	def rec(val):
+		if isinstance(val, str):
+			buf.write(val)
+		else:
+			for item in val:
+				rec(item)
+	rec(value)
+	return buf.getvalue()
 
 ALPHA_LOWER = CharRange('a', 'z')
 ALPHA_UPPER = CharRange('A', 'Z')
