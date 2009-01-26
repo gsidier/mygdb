@@ -82,7 +82,7 @@ if __name__ == '__main__':
 	# inputstr = '{x = "13" , y = ["1"  "2" "foo"] }'
 	# inputstr = 'asyncclass , x = { a = "42", pi = "3.14" }, y = "False"'
 	inputstr = '& "Foobar Error!"\n'
-	inputstr = '1000003*stopped,reason="breakpoint-hit",bkptno="1",thread-id="0",frame={addr="0x08048428",func="main",args=[{name="argc",value="1"},{name="argv",value="0xbfbb3cb4"}],file="hello.c",fullname="/home/greg/code/mygdb/hello.c",line="16"}\n'
+	inputstr = '1000003*stopped,reason="breakpoint-hit",bkptno="1",thread-id="0",frame={addr="0x08048428",func="main",args=[{name="argc",value="1"},{name="argv",value="0xbfbb3cb4"}],file="hello.c",fullname="/some/path/to/hello.c",line="16"}\n'
 	chars = TokenStream(iter(inputstr))
 
 	tokens = lex.lex(chars)
