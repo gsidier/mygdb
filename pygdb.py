@@ -110,11 +110,11 @@ class WatchedVar(object):
 		return self.__repr__()
 
 class VarWatcher(object):
-	def __init__(self, gdbsess, var, type):
+	def __init__(self, gdbsess, var, type, toplevel = True):
 		self.TYPE = type
 		self.gdbsess = gdbsess
 		self.var = var
-		self.gdbsess.add_var_watcher(self.var, self)
+		self.gdbsess.add_var_watcher(self.var, self, toplevel)
 
 	def __del__(self):
 		self.gdbsess.remove_var_watcher(self.var, self)
@@ -143,14 +143,25 @@ class GdbSession(object):
 			# MUST come last
 			GdbController.__init__(self, session.gdb, session)
 
-		def _send(self, command, token = None, on_response = None):
+		def _send(self, command, token = None, on_response = None, sync = False):
 			if token is None:
 				token = self.next_token
 				self.next_token += 1
 			if on_response is not None:
-				self.session._response_handlers[str(token)] = on_response
+				if not sync:
+					self.session._response_handlers[str(token)] = on_response
+				else:
+					def on_response_sync(*args, **kwargs):
+						on_response(*args, **kwargs)
+						on_response_sync.got_response = True
+					on_response_sync.got_response = False
+					self.session._response_handlers[str(token)] = on_response_sync
+						
 			# MUST come last
 			GdbController._send(self, command, token=token)
+			if (sync):
+				while not on_response_sync.got_reponse:
+					time.sleep(0.01)
 	
 	def __init__(self, gdbinst):
 		self.gdb = gdbinst
@@ -251,10 +262,11 @@ class GdbSession(object):
 			self._watcher_slots[root].broadcast(v, upd)
 		self._update_watch(v)
 	
-	def add_var_watcher(self, var, watcher):
+	def add_var_watcher(self, var, watcher, toplevel = True):
 		root = var.name.split('.')[0]
 		self._watcher_slots[root].subscribe(watcher.onUpdate)
-		self._watchers[watcher.TYPE][root] = watcher
+		if toplevel:
+			self._watchers[watcher.TYPE][root] = watcher
 
 	def remove_var_watcher(self, var, watcher):
 		root = var.name.split('.')[0]
@@ -347,7 +359,7 @@ class GdbSession(object):
 	def nexti(self):
 		self.controller.nexti()
 	#
-	def var_create(self, expr):
+	def var_create(self, expr, sync = False):
 		def on_response(response):
 			self.log.debug("VAR CREATE : %s" % response)
 			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.get('value'), numchild = response.numchild, in_scope = True)
@@ -356,9 +368,9 @@ class GdbSession(object):
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			if v.value is None:
 				self.var_eval(v.name)
-			self.var_list_children(v.name)
+			self.var_list_children(v.name, sync = sync)
 			self._update_watch(v)
-		self.controller.var_create(expr, on_response = on_response)
+		self.controller.var_create(expr, on_response = on_response, sync = sync)
 	def var_update(self):
 		def on_response(response):
 			self.log.debug("VAR UPDATE : %s" % response)
@@ -367,7 +379,7 @@ class GdbSession(object):
 					v = self.get_watched_var(upd.name)
 					self._update_var(v, upd)
 		self.controller.var_update(on_response = on_response)
-	def var_list_children(self, name):
+	def var_list_children(self, name, sync = False):
 		def on_response(response):
 			v = self.get_watched_var(name)
 			if v is not None and hasattr(response, 'children'):
@@ -375,7 +387,7 @@ class GdbSession(object):
 				for tag,child in response.children:
 					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.type, value = None, numchild = child.numchild, in_scope = True)
 					self.var_eval(child.name)
-		self.controller.var_list_children(name, on_response = on_response)
+		self.controller.var_list_children(name, on_response = on_response, sync = sync)
 	def var_eval(self, name):
 		def on_response(response):
 			v = self.get_watched_var(name)
