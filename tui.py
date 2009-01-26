@@ -304,7 +304,7 @@ class SourceFileView(View):
 			self.log.debug("SRC LINE : %s" % self.src_line)
 			for i in xrange(len(visible_lines)):
 				lineno = i + startline 
-				line = visible_lines[i].replace('\t', ' ' * self.TABSTOP)
+				line = visible_lines[i].expand_tabs(self.TABSTOP)
 				if lineno == self.src_line:
 					self.win.attron(curses.A_REVERSE)
 					self.win.attron(curses.A_BOLD)
