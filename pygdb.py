@@ -73,6 +73,8 @@ class GdbController(GdbCommandBuilder):
 					continue
 			except SyntaxError, err:
 				self.log.error("GDBMI syntax error : %s" % err.message)
+			except Exception, err:
+				self.log.error("GDBMI error : %s" % err.message)
 	
 		self.log.debug("GDB: Finished")
 	
@@ -117,7 +119,7 @@ class VarWatcher(object):
 	def __del__(self):
 		self.gdbsess.remove_var_watcher(self.var, self)
 
-	def onUpdate(self, var):
+	def onUpdate(self, var, upd):
 		pass
 
 class PlainWatch(VarWatcher):
