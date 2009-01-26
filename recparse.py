@@ -309,6 +309,7 @@ class Lexer(object):
 class Group(Parser):
 	def __init__(self, base):
 		self.base = base
+		self.result_func = base.result_func
 	def _try_parse(self, stream):
 		return self.base._try_parse(stream)
 	
