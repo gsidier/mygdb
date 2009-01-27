@@ -66,9 +66,9 @@ class AbstractVar(object):
 		return self.gdbsess.var_path_expr(self.var.name, sync = True)
 	
 	def register_watch(self, expr, depends):
-		e = expr % tuple(v.path_expr for v in depends)
+		e = ('"%s"' % expr) % tuple(v.var_path for v in depends)
 			
-		v = gdbsess.var_create(e, sync = True)
+		v = self.gdbsess.var_create(e, sync = True)
 		self.gdbsess.add_var_watcher(v, self)
 		return self._wrap(v)
 
@@ -79,7 +79,7 @@ class StdVectorWatch(AbstractVar):
 	def __init__(self, gdbsess, var):
 		AbstractVar.__init__(self, gdbsess, var)
 		self.arrlen = self.register_watch(
-			"((%s)._M_impl._M_finish - (%s)._M_impl._M_start",
+			"(%s)._M_impl._M_finish - (%s)._M_impl._M_start",
 			(self.var, self.var))
 		self.array = self.register_watch(
 			"(%s)._M_impl._M_start[0]@(%s)", 

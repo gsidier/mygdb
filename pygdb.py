@@ -160,7 +160,7 @@ class GdbSession(object):
 			# MUST come last
 			GdbController._send(self, command, token=token)
 			if (sync):
-				while not on_response_sync.got_response:
+				while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
 					time.sleep(0.01)
 				return on_response_sync.response
 	
@@ -369,7 +369,7 @@ class GdbSession(object):
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			if v.value is None:
 				self.var_eval(v.name)
-			v.path_expr = self.var_path_expr(v.name, sync = True)
+			self.var_path_expr(v.name)#, sync = True)
 			self.var_list_children(v.name, sync = sync)
 			self._update_watch(v)
 		return self.controller.var_create(expr, on_response = on_response, sync = sync)
@@ -399,7 +399,8 @@ class GdbSession(object):
 		return self.controller.var_eval(name, on_response = on_response)
 	def var_path_expr(self, name, sync = False):
 		def on_response(response):
-			return response.path_expr
+			v = self.get_watched_var(name)
+			v.var_path = response.get('path_expr', None)
 		return self.controller.var_path_expr(name, on_response = on_response, sync = sync)
 
 if __name__ == '__main__':
