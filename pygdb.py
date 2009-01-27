@@ -28,6 +28,7 @@ class GdbController(GdbCommandBuilder):
 		self.output_handler = output_handler
 	
 		self.log = logging.getLogger("gdb")
+		self.gdblog = logging.getLogger("gdbout")
 	
 		self.output_hist = []
 		self.target_hist = []
@@ -61,6 +62,7 @@ class GdbController(GdbCommandBuilder):
 		while True:
 			line = stream.readline()
 			if line == '': break
+			self.gdblog.debug(line)
 			self.log.debug("GDB says: %s" % line)
 			self.output_hist.append(line)
 
@@ -387,7 +389,7 @@ class GdbSession(object):
 			if v is not None and hasattr(response, 'children'):
 				v.children = {}
 				for tag,child in response.children:
-					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.type, value = None, numchild = child.numchild, in_scope = True)
+					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.get('type', None), value = None, numchild = child.numchild, in_scope = True)
 					self.var_eval(child.name)
 		return self.controller.var_list_children(name, on_response = on_response, sync = sync)
 	def var_eval(self, name):
