@@ -484,7 +484,8 @@ class TopLevelKeyboardInput(Controller):
 		':': lambda self: self.gdbtui.commandHandler.onStartInput(mode='quick'),
 		'o': lambda self: self.gdbtui.commandHandler.onStartPythonShell(),
 		'KEY_F(2)': lambda self: self.gdbtui.commandHandler.onStartShell(),
-		'KEY_F(10)': lambda self: self.gdbtui.commandHandler.onPopoutLog(),
+		'KEY_F(10)': lambda self: self.gdbtui.commandHandler.onPopoutLog("session.log"),
+		'KEY_F(11)': lambda self: self.gdbtui.commandHandler.onPopoutLog("gdbout.log"),
 		'KEY_RESIZE': lambda self: self.gdbtui.commandHandler.onResize(),
 		'KEY_UP': lambda self: self.gdbtui.commandHandler.onScrollUp(),
 		'KEY_DOWN': lambda self: self.gdbtui.commandHandler.onScrollDown(),
@@ -588,8 +589,8 @@ class CommandHandler(object):
 	def _onStartShell(self):
 		self.app.switch_mode('SHELL')
 
-	def _onPopoutLog(self):
-		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", "session.log"])
+	def _onPopoutLog(self, path):
+		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", path])
 
 class PyGdbTui(TopLevelView):
 
@@ -722,6 +723,11 @@ if __name__ == '__main__':
 	log.addHandler(logging.FileHandler("session.log"))
 	log.setLevel(logging.DEBUG)
 
+	gdbout_path = "gdbout.log"
+	#file(gdbout_path, "w").close() # truncate previous log
+	gdblog = logging.getLogger("gdbout")
+	gdblog.addHandler(logging.FileHandler(gdbout_path))
+	gdblog.setLevel(logging.DEBUG)
 
 	gdb = pygdb.GdbMI()
 	app = App(gdb)
