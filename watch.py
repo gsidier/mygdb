@@ -1,81 +1,4 @@
 import pygdb
-
-class WrappedWatch(object):
-	def __init__(self, gdbsess, var):
-		self.gdbsess = gdbsess
-		self.var = var
-	
-	def __wrap(self, var):
-		"""
-		Take a plain var and wrap it. To be implemented by subclasses.
-		"""
-		pass
-
-	def __children(self):
-		if self.var.children is None:
-			children = self.gdbsess.var_list_children(var.name, sync = True)
-			return dict( (k, self.__wrap(v)) for k, v in children )
-		
-		if self.var.children is None: # still
-			raise Exception, "Var get children failed."
-	
-	def __getchild(self, chld):
-		if chld in self.__children:
-			return self.__wrap(self.var.children[chld])
-		else:
-			raise Exception, "Var subitem not found."
-	
-	def __getattr__(self, attr):
-		return self.__getchild(attr)
-
-	def __getitem__(self, idx):
-		return self.__getchild(str(idx))
-
-	def __value(self):
-		return self.var.value
-
-	def __type(self):
-		return self.var.type
-
-class FilteredWatch():
-	def __init__(self, gdbsess, var):
-		WrappedWatch.__init__(self, gdbsess, var)
-		self.children = {}
-		self.pyval = None
-		self.w = WrappedWatch(gdbsess, var)
-	
-	def register_watch(self, expr, depends, toplevel = True):
-		e = expr % tuple(v.name for v in depends)
-			
-		v = gdbsess.var_create(e, sync = True)
-		self.gdbsess.add_var_watcher(v, self, toplevel)
-		return WrappedWatch(self.gdbsess, v)
-	
-	def _pyval(self):
-		pass
-	
-	def _children(self):
-		pass
-	
-	def onUpdate(self, var, upd):
-		self.children = self._children()
-		self.pyval = self._pyval()
-
-
-class StdVectorWatch(FilteredWatch):
-	def __init__(self, gdbsess, var):
-		FilteredWatch.__init__(gdbsess, var)
-		self.array = self.register_watch(
-			"(%s)._M_impl._M_start[0]@((%s)._M_impl._M_finish - (%s)._M_impl._M_start)", 
-			(self.var, self.var, self.var), toplevel = False)
-	
-	def _pyval(self):
-		idx = sorted( int(k) for k in self.array.__children.keys() )
-		return [ self.array[k].__value for k in idx ]
-
-	def _children(self):
-		return self.array.__children()
-
 """
 Common interface for watchable variables:
 
@@ -90,3 +13,79 @@ var v,
 	v.children = None
 
 """
+class AbstractVar(object):
+
+	type = property(lambda self: self._type())
+	value = property(lambda self: self._value())
+	name = property(lambda self: self._name())
+	expr = property(lambda self: self._expr())
+	children = property(lambda self: self._children())
+	numchild = property(lambda self: self._numchild())
+	in_scope = property(lambda self: self._in_scope())
+	path_expr = property(lambda self: self._path_expr())
+	
+
+	def __init__(self, gdbsess, var):
+		self.gdbsess = gdbsess
+		self.var = var
+	
+	def _children(self):
+		if self.var.children is None:
+			self.gdbsess.var_list_children(self.var.name, sync = True)
+		
+		if self.var.children is None: # still
+			raise Exception, "Var get children failed."
+
+		return dict( (k, self._wrap(v)) for k, v in self.var.children )
+	
+	def __getitem__(self, idx):
+		return self.children[str(idx)]
+	
+	def _type(self):
+		return self.var.type
+	
+	def _name(self):
+		return self.var.name
+		
+	def _expr(self):
+		return self.var.expr
+	
+	def _value(self):
+		return self.var.value
+	
+	def _numchild(self):
+		return self.var.numchild
+	
+	def _in_scope(self):
+		return self.var._in_scope
+	
+	def _wrap(self, var):
+		return type(self)(self.gdbsess, var)
+	
+	def _path_expr(self):
+		return self.gdbsess.var_path_expr(self.var.name, sync = True)
+	
+	def register_watch(self, expr, depends):
+		e = expr % tuple(v.path_expr for v in depends)
+			
+		v = gdbsess.var_create(e, sync = True)
+		self.gdbsess.add_var_watcher(v, self)
+		return self._wrap(v)
+
+	def onUpdate(self, var, upd):
+		pass
+
+class StdVectorWatch(AbstractVar):
+	def __init__(self, gdbsess, var):
+		AbstractVar.__init__(self, gdbsess, var)
+		self.arrlen = self.register_watch(
+			"((%s)._M_impl._M_finish - (%s)._M_impl._M_start",
+			(self.var, self.var))
+		self.array = self.register_watch(
+			"(%s)._M_impl._M_start[0]@(%s)", 
+			(self.var, self.arrlen))
+	
+	def _children(self):
+		return self.array.children
+		
+

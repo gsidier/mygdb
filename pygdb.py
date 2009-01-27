@@ -152,7 +152,7 @@ class GdbSession(object):
 					self.session._response_handlers[str(token)] = on_response
 				else:
 					def on_response_sync(*args, **kwargs):
-						on_response(*args, **kwargs)
+						on_response_sync.response = on_response(*args, **kwargs)
 						on_response_sync.got_response = True
 					on_response_sync.got_response = False
 					self.session._response_handlers[str(token)] = on_response_sync
@@ -160,8 +160,9 @@ class GdbSession(object):
 			# MUST come last
 			GdbController._send(self, command, token=token)
 			if (sync):
-				while not on_response_sync.got_reponse:
+				while not on_response_sync.got_response:
 					time.sleep(0.01)
+				return on_response_sync.response
 	
 	def __init__(self, gdbinst):
 		self.gdb = gdbinst
@@ -331,9 +332,9 @@ class GdbSession(object):
 		self.controller.set_args(args)
 		def on_response(response):
 			self.onFileChanged.broadcast(filename)
-		self.controller.file(filename, on_response=on_response)
+		return self.controller.file(filename, on_response=on_response)
 	def attach(self, what):
-		self.controller.target_attach(what)
+		return self.controller.target_attach(what)
 	#
 	def setbreak(self, loc=None, cond=None, temp=False, hardware=False, count=None, thread=None, force=False):
 		def on_response(desc):
@@ -347,17 +348,17 @@ class GdbSession(object):
 		return self.setbreak(loc=loc, cond=cond, count=count, thread=thread, force=force, temp=True, hardware=True)
 	#
 	def run(self):
-		self.controller.run()
+		return self.controller.run()
 	def cont(self):
-		self.controller.cont()
+		return self.controller.cont()
 	def step(self):
-		self.controller.step()
+		return self.controller.step()
 	def stepi(self):
-		self.controller.stepi()
+		return self.controller.stepi()
 	def next(self):
-		self.controller.next()
+		return self.controller.next()
 	def nexti(self):
-		self.controller.nexti()
+		return self.controller.nexti()
 	#
 	def var_create(self, expr, sync = False):
 		def on_response(response):
@@ -368,9 +369,10 @@ class GdbSession(object):
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			if v.value is None:
 				self.var_eval(v.name)
+			v.path_expr = self.var_path_expr(v.name, sync = True)
 			self.var_list_children(v.name, sync = sync)
 			self._update_watch(v)
-		self.controller.var_create(expr, on_response = on_response, sync = sync)
+		return self.controller.var_create(expr, on_response = on_response, sync = sync)
 	def var_update(self):
 		def on_response(response):
 			self.log.debug("VAR UPDATE : %s" % response)
@@ -378,7 +380,7 @@ class GdbSession(object):
 				for upd in response.changelist:
 					v = self.get_watched_var(upd.name)
 					self._update_var(v, upd)
-		self.controller.var_update(on_response = on_response)
+		return self.controller.var_update(on_response = on_response)
 	def var_list_children(self, name, sync = False):
 		def on_response(response):
 			v = self.get_watched_var(name)
@@ -387,14 +389,18 @@ class GdbSession(object):
 				for tag,child in response.children:
 					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.type, value = None, numchild = child.numchild, in_scope = True)
 					self.var_eval(child.name)
-		self.controller.var_list_children(name, on_response = on_response, sync = sync)
+		return self.controller.var_list_children(name, on_response = on_response, sync = sync)
 	def var_eval(self, name):
 		def on_response(response):
 			v = self.get_watched_var(name)
 			if v is not None:
 				v.value = response.value
 				self._update_var(v, response)
-		self.controller.var_eval(name, on_response = on_response)
+		return self.controller.var_eval(name, on_response = on_response)
+	def var_path_expr(self, name, sync = False):
+		def on_response(response):
+			return response.path_expr
+		return self.controller.var_path_expr(name, on_response = on_response, sync = sync)
 
 if __name__ == '__main__':
 	g = GdbMI()
