@@ -12,6 +12,9 @@ class GdbCommandBuilder(object):
 		Additional parameters may be passed by keyword to this function, they will be passed via the command function wrappers below.
 		"""
 		raise NotImplementedError()
+	
+	def _quote(self, arg):
+		return '"%s"' % (arg.replace('"', r'\"'))
 
 	def quit(self, token, **kwargs):	
 		return self._send("quit", token, **kwargs)
@@ -92,27 +95,27 @@ class GdbCommandBuilder(object):
 			name = '-'
 		if frame is None:
 			frame = '*'
-		return self._send("-var-create %s %s %s" % (name, frame, expr), token , **kwargs)
+		return self._send("-var-create %s %s %s" % (name, frame, self._quote(expr)), token , **kwargs)
 	def var_delete(self, name, token = None, **kwargs):
-		return self._send("-var-delete %s" % name, token, **kwargs)
+		return self._send("-var-delete %s" % self._quote(name), token, **kwargs)
 	def var_set_format(self, name, format, token = None, **kwargs):
 		return self._send("-var-set-format %s %s" % (name, format), token, **kwargs)
 	def var_show_format(self, name, token = None, **kwargs):
-		return self._send("-var-show-format %s" % name, token, **kwargs)
+		return self._send("-var-show-format %s" % self._quote(name), token, **kwargs)
 	def var_num_children(self, name, token = None, **kwargs):
-		return self._send("-var-info-num-children %s" % name, token, **kwargs)
+		return self._send("-var-info-num-children %s" % self._quote(name), token, **kwargs)
 	def var_list_children(self, name, token = None, **kwargs):
-		return self._send("-var-list-children %s" % name, token, **kwargs)
+		return self._send("-var-list-children %s" % self._quote(name), token, **kwargs)
 	def var_type(self, name, token = None, **kwargs):
-		return self._send("-var-info-type %s" % name, token, **kwargs)
+		return self._send("-var-info-type %s" % self._quote(name), token, **kwargs)
 	def var_path_expr(self, name, token = None, **kwargs):
-		return self._send("-var-info-path-expression %s" % name, token, **kwargs)
+		return self._send("-var-info-path-expression %s" % self._quote(name), token, **kwargs)
 	def var_attributes(self, name, token = None, **kwargs):
-		return self._send("-var-show-attributes %s" % name, token, **kwargs)
+		return self._send("-var-show-attributes %s" % self._quote(name), token, **kwargs)
 	def var_eval(self, name, token = None, **kwargs):
-		return self._send("-var-evaluate-expression %s" % name, token, **kwargs)
+		return self._send("-var-evaluate-expression %s" % self._quote(name), token, **kwargs)
 	def var_assign(self, name, expr, token = None, **kwargs):
-		return self._send("-var-assign %s %s" % (name, expr), token, **kwargs)
+		return self._send("-var-assign %s %s" % (self._quote(name), expr), token, **kwargs)
 	def var_update(self, name = None, print_values = "--all-values", token = None, **kwargs):
 		return self._send("-var-update %s %s" % (print_values, name if name else '*'), token, **kwargs)
 	def var_set_frozen(self, name, flag = 1, token = None, **kwargs):
@@ -131,7 +134,7 @@ class GdbCommandBuilder(object):
 			filespec = ""
 		return self._send("-data-disassemble %s %s -- %d" % (addrspec, filespec, mode), token, **kwargs)
 	def data_eval(self, expr, token = None, **kwargs):
-		return self._send("-data-evaluate-expression %s" % expr, token, **kwargs)
+		return self._send("-data-evaluate-expression %s" % self._quote(expr), token, **kwargs)
 	def data_list_changed_regs(self, token = None, **kwargs):
 		return self._send("-data-list-changed-registers", token, **kwargs)
 	def data_list_reg_names(self, token = None, **kwargs):
