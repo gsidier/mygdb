@@ -678,6 +678,7 @@ class PyGdbTui(TopLevelView):
 		self.log_view.addLog(logging.getLogger('gdb'), curses_format = self.settings.attr('DEFAULT'))
 		self.log_view.addLog(logging.getLogger('gdbout'), curses_format = self.settings.attr('LOG_GDBOUT'))
 		self.log_view.addLog(logging.getLogger('gdbin'), curses_format = self.settings.attr('LOG_GDBIN'))
+		self.log_view.addLog(logging.getLogger('gdberr'), curses_format = self.settings.attr('LOG_GDBERR'))
 
 		self.command_panel = CommandPanel(self)
 	
@@ -778,7 +779,6 @@ if __name__ == '__main__':
 	log.setLevel(logging.DEBUG)
 
 	gdbout_path = "gdbout.log"
-	#file(gdbout_path, "w").close() # truncate previous log
 	gdblog = logging.getLogger("gdbout")
 	gdblog.addHandler(logging.FileHandler(gdbout_path))
 	gdblog2session = logging.FileHandler(sessionlog_path)
@@ -793,6 +793,14 @@ if __name__ == '__main__':
 	gdbinlog2session.setFormatter(logging.Formatter('SENDING CMD> %(message)s'))
 	gdbinlog.addHandler(gdbinlog2session)
 	gdbinlog.setLevel(logging.DEBUG)
+
+	gdberr_path = "gdberr.log"
+	gdberrlog = logging.getLogger("gdberr")
+	gdberrlog.addHandler(logging.FileHandler(gdberr_path))
+	gdberrlog2session = logging.FileHandler(sessionlog_path)
+	gdberrlog2session.setFormatter(logging.Formatter('GDB ERR> %(message)s'))
+	gdberrlog.addHandler(gdberrlog2session)
+	gdberrlog.setLevel(logging.DEBUG)
 
 	gdb = pygdb.GdbMI()
 	app = App(gdb)
