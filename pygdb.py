@@ -157,14 +157,15 @@ class GdbSession(object):
 					def on_response_sync(*args, **kwargs):
 						on_response_sync.response = on_response(*args, **kwargs)
 						on_response_sync.got_response = True
+					on_response_sync.response = None
 					on_response_sync.got_response = False
 					self.session._response_handlers[str(token)] = on_response_sync
 						
 			# MUST come last
 			GdbController._send(self, command, token=token)
 			if sync:
-				#while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
-				time.sleep(0.1)
+				while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
+					time.sleep(0.1)
 				return on_response_sync.response
 	
 	def __init__(self, gdbinst):
@@ -217,9 +218,13 @@ class GdbSession(object):
 			if self._response_handlers.has_key(token):
 				self.log.debug("TOKEN FOUND: %s" % repr(token))
 				handler = self._response_handlers[token]
-				more = handler(results)
-				if not more:
-					self._response_handlers.pop(token)
+				def thread_func():
+					more = handler(results)
+					if not more:
+						self._response_handlers.pop(token)
+				handler_thread = threading.Thread(target = thread_func, args = [])
+				handler_thread.setDaemon(True)
+				handler_thread.start()
 			else:
 				self.log.debug("TOKEN NOT FOUND: %s" % repr(token))
 		
@@ -372,9 +377,10 @@ class GdbSession(object):
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			if v.value is None:
 				self.var_eval(v.name)
-			self.var_path_expr(v.name)#, sync = True)
+			self.var_path_expr(v.name, sync = sync)
 			self.var_list_children(v.name, sync = sync)
 			self._update_watch(v)
+			return v
 		return self.controller.var_create(expr, on_response = on_response, sync = sync)
 	def var_update(self):
 		def on_response(response):
@@ -407,6 +413,37 @@ class GdbSession(object):
 		return self.controller.var_path_expr(name, on_response = on_response, sync = sync)
 
 if __name__ == '__main__':
+	
+	sessionlog_path = "session.log"
+	
+	log = logging.getLogger("gdb")
+	log.addHandler(logging.FileHandler(sessionlog_path))
+	log.setLevel(logging.DEBUG)
+
+	gdbout_path = "gdbout.log"
+	gdblog = logging.getLogger("gdbout")
+	gdblog.addHandler(logging.FileHandler(gdbout_path))
+	gdblog2session = logging.FileHandler(sessionlog_path)
+	gdblog2session.setFormatter(logging.Formatter('GDB OUT> %(message)s'))
+	gdblog.addHandler(gdblog2session)
+	gdblog.setLevel(logging.DEBUG)
+
+	gdbin_path = "gdbin.log"
+	gdbinlog = logging.getLogger("gdbin")
+	gdbinlog.addHandler(logging.FileHandler(gdbin_path))
+	gdbinlog2session = logging.FileHandler(sessionlog_path)
+	gdbinlog2session.setFormatter(logging.Formatter('SENDING CMD> %(message)s'))
+	gdbinlog.addHandler(gdbinlog2session)
+	gdbinlog.setLevel(logging.DEBUG)
+
+	gdberr_path = "gdberr.log"
+	gdberrlog = logging.getLogger("gdberr")
+	gdberrlog.addHandler(logging.FileHandler(gdberr_path))
+	gdberrlog2session = logging.FileHandler(sessionlog_path)
+	gdberrlog2session.setFormatter(logging.Formatter('GDB ERR> %(message)s'))
+	gdberrlog.addHandler(gdberrlog2session)
+	gdberrlog.setLevel(logging.DEBUG)
+
 	g = GdbMI()
 	gin,gout,gerr = g.gdbin,g.gdbout,g.gdberr
 	S = GdbSession(g)
@@ -414,6 +451,5 @@ if __name__ == '__main__':
 
 	def echo(msg):
 		print msg
-	S.onError.subscribe(lambda sess, tok, msg: echo( "ERR: %s" % msg))
-	S.onFileChanged.subscribe(lambda sess, fname: echo("File changed! %s" % fname))
+	S.onError.subscribe(lambda tok, msg: echo( "ERR: %s" % msg))
 	
