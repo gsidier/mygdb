@@ -243,14 +243,41 @@ class Settings(object):
 	
 	COLOR_DEFAULT = (curses.COLOR_WHITE, curses.COLOR_BLACK)
 	COLOR_ACTIVE_BORDER = (curses.COLOR_YELLOW, curses.COLOR_BLACK)
+	
+	COLOR_LOG_GDBOUT = (curses.COLOR_YELLOW, curses.COLOR_BLACK)
+	COLOR_LOG_GDBIN = (curses.COLOR_GREEN, curses.COLOR_BLACK)
+	COLOR_LOG_GDBERR = (curses.COLOR_RED, curses.COLOR_BLACK)
+	COLOR_LOG_TARGETOUT = (curses.COLOR_CYAN, curses.COLOR_BLACK)
+	COLOR_LOG_TARGETERR = (curses.COLOR_MAGENTA, curses.COLOR_BLACK)
 
-	PAIR_DEFAULT = 1
+	PAIR_DEFAULT       = 1
 	PAIR_ACTIVE_BORDER = 2
+	PAIR_LOG_GDBOUT    = 3
+	PAIR_LOG_GDBIN     = 4
+	PAIR_LOG_GDBERR    = 5
+	PAIR_LOG_TARGETOUT = 6
+	PAIR_LOG_TARGETERR = 7
 
+	ATTR_DEFAULT       = curses.A_NORMAL
+	ATTR_ACTIVE_BORDER = curses.A_BOLD
+	ATTR_LOG_GDBOUT    = curses.A_NORMAL
+	ATTR_LOG_GDBIN     = curses.A_NORMAL
+	ATTR_LOG_GDBERR    = curses.A_NORMAL
+	ATTR_LOG_TARGETOUT = curses.A_NORMAL
+	ATTR_LOG_TARGETERR = curses.A_NORMAL
+	
 	def apply(self):
 		curses.init_pair(self.PAIR_DEFAULT, *self.COLOR_DEFAULT)
 		curses.init_pair(self.PAIR_ACTIVE_BORDER, *self.COLOR_ACTIVE_BORDER)
+		curses.init_pair(self.PAIR_LOG_GDBOUT, *self.COLOR_LOG_GDBOUT)
+		curses.init_pair(self.PAIR_LOG_GDBIN, *self.COLOR_LOG_GDBIN)
+		curses.init_pair(self.PAIR_LOG_GDBERR, *self.COLOR_LOG_GDBERR)
+		curses.init_pair(self.PAIR_LOG_TARGETOUT, *self.COLOR_LOG_TARGETOUT)
+		curses.init_pair(self.PAIR_LOG_TARGETERR, *self.COLOR_LOG_TARGETERR)
 
+	def attr(self, name):
+		return getattr(self, "ATTR_%s" % name) | curses.color_pair(getattr(self, "PAIR_%s" % name))
+	
 class SourceFileView(View):
 
 	TABSTOP = 4
@@ -390,15 +417,36 @@ class CommandPanel(View):
 	def accept_focus(self):
 		return False
 
-class LogView(View, logging.Handler):
+class LogView(View):
 		
-	def __init__(self, log, parent = None, win = None):
+	class Handler(logging.Handler):
+		def __init__(self, log_view, log, log_format, curses_format):
+			logging.Handler.__init__(self)
+			self.log_view = log_view
+			self.log = log
+			self.curses_format = curses_format
+			if log_format is not None:			
+				self.setFormatter(log_format)
+			self.log.addHandler(self)
+
+		def emit(self, record):
+			s = self.format(record)
+			self.log_view.log(s, self.curses_format)
+	
+	def __init__(self, parent = None, win = None):
 		View.__init__(self, parent, win)
 		self.setwin(win)
-		logging.Handler.__init__(self)
-		self.log = log
-		self.log.addHandler(self)
+		self.handlers = {} # log -> handler
 
+	def addLog(self, log, curses_format, log_format = None):
+		self.handlers[log] = self.Handler(self, log, log_format, curses_format)
+	
+	def removeLog(self, log):
+		handler = self.handlers.get(log, None)
+		if handler is not None:
+			log.removeHandler(handler)
+		self.handlers.pop(log)
+	
 	def setwin(self, win):
 		if win is not None:
 			win.scrollok(1)
@@ -406,12 +454,12 @@ class LogView(View, logging.Handler):
 			win.setscrreg(0, maxy - 1)
 		self._setwin(win)
 
-	def emit(self, record):
+	def log(self, text, attr):
 		maxy, maxx = self.win.getmaxyx()
-		s = self.format(record)
-		for line in s.splitlines():
+		self.win.attron(attr)
+		for line in text.splitlines(): 
 			self.win.scroll()
-			self.win.addnstr(maxy - 1, 0, s, maxx)
+			self.win.addnstr(maxy - 1, 0, line, maxx)
 
 class WatchView(View):
 
@@ -486,6 +534,7 @@ class TopLevelKeyboardInput(Controller):
 		'KEY_F(2)': lambda self: self.gdbtui.commandHandler.onStartShell(),
 		'KEY_F(10)': lambda self: self.gdbtui.commandHandler.onPopoutLog("session.log"),
 		'KEY_F(11)': lambda self: self.gdbtui.commandHandler.onPopoutLog("gdbout.log"),
+		'KEY_F(12)': lambda self: self.gdbtui.commandHandler.onPopoutLog("gdbin.log"),
 		'KEY_RESIZE': lambda self: self.gdbtui.commandHandler.onResize(),
 		'KEY_UP': lambda self: self.gdbtui.commandHandler.onScrollUp(),
 		'KEY_DOWN': lambda self: self.gdbtui.commandHandler.onScrollDown(),
@@ -625,7 +674,10 @@ class PyGdbTui(TopLevelView):
 			(-.4, self.watch_panel) 
 		)
 		
-		self.log_view = LogView(self.log)
+		self.log_view = LogView()
+		self.log_view.addLog(logging.getLogger('gdb'), curses_format = self.settings.attr('DEFAULT'))
+		self.log_view.addLog(logging.getLogger('gdbout'), curses_format = self.settings.attr('LOG_GDBOUT'))
+		self.log_view.addLog(logging.getLogger('gdbin'), curses_format = self.settings.attr('LOG_GDBIN'))
 
 		self.command_panel = CommandPanel(self)
 	
@@ -718,16 +770,29 @@ class App(object):
 		self.appmode = mode
 
 if __name__ == '__main__':
+
+	sessionlog_path = "session.log"
 	
 	log = logging.getLogger("gdb")
-	log.addHandler(logging.FileHandler("session.log"))
+	log.addHandler(logging.FileHandler(sessionlog_path))
 	log.setLevel(logging.DEBUG)
 
 	gdbout_path = "gdbout.log"
 	#file(gdbout_path, "w").close() # truncate previous log
 	gdblog = logging.getLogger("gdbout")
 	gdblog.addHandler(logging.FileHandler(gdbout_path))
+	gdblog2session = logging.FileHandler(sessionlog_path)
+	gdblog2session.setFormatter(logging.Formatter('GDB OUT> %(message)s'))
+	gdblog.addHandler(gdblog2session)
 	gdblog.setLevel(logging.DEBUG)
+
+	gdbin_path = "gdbin.log"
+	gdbinlog = logging.getLogger("gdbin")
+	gdbinlog.addHandler(logging.FileHandler(gdbin_path))
+	gdbinlog2session = logging.FileHandler(sessionlog_path)
+	gdbinlog2session.setFormatter(logging.Formatter('SENDING CMD> %(message)s'))
+	gdbinlog.addHandler(gdbinlog2session)
+	gdbinlog.setLevel(logging.DEBUG)
 
 	gdb = pygdb.GdbMI()
 	app = App(gdb)
