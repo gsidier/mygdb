@@ -27,8 +27,9 @@ class GdbController(GdbCommandBuilder):
 		self.gdb = gdb_instance
 		self.output_handler = output_handler
 	
-		self.log = logging.getLogger("gdb")
-		self.gdblog = logging.getLogger("gdbout")
+		self.log = logging.getLogger("gdb") # log everything
+		self.gdblog = logging.getLogger("gdbout") # log what comes out of gdb
+		self.gdbinlog = logging.getLogger("gdbin") # log what goes into gdb
 	
 		self.output_hist = []
 		self.target_hist = []
@@ -53,9 +54,10 @@ class GdbController(GdbCommandBuilder):
 		self.gdb.gdbin.write("\n")
 	
 	def _send(self, command, token = None):
-		self.log.debug("SENDING[%s]: %s" % (str(token), command))
-		self.gdb.gdbin.write(str(token))
-		self.gdb.gdbin.write(command.strip())
+		#self.log.debug("SENDING[%s]: %s" % (str(token), command))
+		cmdline = "%s%s" % (str(token), command.strip())
+		self.gdbinlog.debug(cmdline)
+		self.gdb.gdbin.write(cmdline)
 		self.gdb.gdbin.write("\n")
 
 	def _gdb_raw_output_thread(self, stream):
@@ -63,7 +65,7 @@ class GdbController(GdbCommandBuilder):
 			line = stream.readline()
 			if line == '': break
 			self.gdblog.debug(line)
-			self.log.debug("GDB says: %s" % line)
+			#self.log.debug("GDB says: %s" % line)
 			self.output_hist.append(line)
 
 			try:
@@ -161,9 +163,9 @@ class GdbSession(object):
 						
 			# MUST come last
 			GdbController._send(self, command, token=token)
-			if (sync):
-				while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
-					time.sleep(0.01)
+			if sync:
+				#while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
+				time.sleep(0.1)
 				return on_response_sync.response
 	
 	def __init__(self, gdbinst):
