@@ -30,6 +30,7 @@ class GdbController(GdbCommandBuilder):
 		self.log = logging.getLogger("gdb") # log everything
 		self.gdblog = logging.getLogger("gdbout") # log what comes out of gdb
 		self.gdbinlog = logging.getLogger("gdbin") # log what goes into gdb
+		self.gdberrlog = logging.getLogger("gdberr") # log gdb errors
 	
 		self.output_hist = []
 		self.target_hist = []
@@ -54,7 +55,6 @@ class GdbController(GdbCommandBuilder):
 		self.gdb.gdbin.write("\n")
 	
 	def _send(self, command, token = None):
-		#self.log.debug("SENDING[%s]: %s" % (str(token), command))
 		cmdline = "%s%s" % (str(token), command.strip())
 		self.gdbinlog.debug(cmdline)
 		self.gdb.gdbin.write(cmdline)
@@ -65,7 +65,6 @@ class GdbController(GdbCommandBuilder):
 			line = stream.readline()
 			if line == '': break
 			self.gdblog.debug(line)
-			#self.log.debug("GDB says: %s" % line)
 			self.output_hist.append(line)
 
 			try:
@@ -86,7 +85,7 @@ class GdbController(GdbCommandBuilder):
 		while True:
 			line = stream.readline()
 			if line == '': break
-			self.log.debug("GDB error: %s" % line)
+			self.gdberrlog.debug(line)
 		self.log.debug("(GDB stderr : closes)")
 	
 	def _target_output_thread(self, stream):
