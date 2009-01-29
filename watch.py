@@ -30,13 +30,16 @@ class AbstractVar(object):
 		self.var = var
 	
 	def _children(self):
+		if self.var.numchild == 0:
+			return {}
+		
 		if self.var.children is None:
 			self.gdbsess.var_list_children(self.var.name, sync = True)
 		
 		if self.var.children is None: # still
 			raise Exception, "Var get children failed."
 
-		return dict( (k, self._wrap(v)) for k, v in self.var.children )
+		return dict( (k, self._wrap(v)) for k, v in self.var.children.iteritems() )
 	
 	def __getitem__(self, idx):
 		return self.children[str(idx)]
@@ -60,24 +63,34 @@ class AbstractVar(object):
 		return self.var._in_scope
 	
 	def _wrap(self, var):
-		return type(self)(self.gdbsess, var)
+		return AbstractVar(self.gdbsess, var)
 	
 	def _path_expr(self):
 		return self.gdbsess.var_path_expr(self.var.name, sync = True)
 	
 	def register_watch(self, expr, depends):
-		e = expr % tuple(v.var_path for v in depends)
+		e = expr % tuple(v.path_expr for v in depends)
 			
 		v = self.gdbsess.var_create(e, sync = True)
-		self.gdbsess.add_var_watcher(v, self)
+		self.gdbsess.add_var_watcher(v, self, toplevel = False)
 		return self._wrap(v)
 
 	def onUpdate(self, var, upd):
 		pass
 
-class StdVectorWatch(AbstractVar):
+class FilteredWatch(AbstractVar):
+	def _wrap(self, var):
+		if var.type is not None:
+			if var.type.startswith('std::basic_string<') and var.type[-1] == '>':
+				return StdStringWatch(self.gdbsess, var)
+			elif var.type.startswith('std::vector<') and var.type[-1] == '>':
+				return StdVectorWatch(self.gdbsess, var)
+		return FilteredWatch(self.gdbsess, var)
+
+
+class StdVectorWatch(FilteredWatch):
 	def __init__(self, gdbsess, var):
-		AbstractVar.__init__(self, gdbsess, var)
+		FilteredWatch.__init__(self, gdbsess, var)
 		self.arrlen = self.register_watch(
 			"(%s)._M_impl._M_finish - (%s)._M_impl._M_start",
 			(self.var, self.var))
@@ -88,4 +101,18 @@ class StdVectorWatch(AbstractVar):
 	def _children(self):
 		return self.array.children
 		
+class StdStringWatch(FilteredWatch):
+	def __init__(self, gdbsess, var):
+		FilteredWatch.__init__(self, gdbsess, var)
+		self.chars = self.register_watch(
+			"(%s)._M_dataplus._M_p",
+			(self.var,)
+		)
+	def _value(self):
+		return self.chars.value
+	def _numchild(self):
+		return 0
+	def _children(self):
+		return {}
+
 
