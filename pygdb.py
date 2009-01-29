@@ -165,7 +165,7 @@ class GdbSession(object):
 			GdbController._send(self, command, token=token)
 			if sync:
 				while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
-					time.sleep(0.1)
+					time.sleep(0.01)
 				return on_response_sync.response
 	
 	def __init__(self, gdbinst):
@@ -178,6 +178,7 @@ class GdbSession(object):
 		self._response_handlers = {}
 		
 		self._watch = {}
+		self._vars = {} # name -> var
 		self._watchers = defaultdict(lambda: {})
 		self._watcher_slots = defaultdict(lambda: EventSlot())
 		
@@ -251,16 +252,7 @@ class GdbSession(object):
 		self.onFrameChange.broadcast(frame)
 
 	def get_watched_var(self, path):
-		path = path.split('.')
-		children = self._watch
-		v = None
-		for item in path:
-			if children is not None and item in children:
-				v = children[item]
-				children = v.children
-			else:
-				return None
-		return v
+		return self._vars.get(path, None)
 
 	def _update_watch(self, v):
 		self.onWatchUpdate.broadcast(v)
@@ -374,6 +366,7 @@ class GdbSession(object):
 			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.get('value'), numchild = response.numchild, in_scope = True)
 			w = PlainWatch(self, v)
 			self._watch[v.name] = v
+			self._vars[v.name] = v
 			self.log.debug("WATCHLIST : %s" % self._watch)
 			if v.value is None:
 				self.var_eval(v.name)
@@ -396,20 +389,25 @@ class GdbSession(object):
 			if v is not None and hasattr(response, 'children'):
 				v.children = {}
 				for tag,child in response.children:
-					v.children[child.exp] = WatchedVar(name = child.name, expr = child.exp, type = child.get('type', None), value = None, numchild = child.numchild, in_scope = True)
-					self.var_eval(child.name)
+					childv = WatchedVar(name = child.name, expr = child.exp, type = child.get('type', None), value = None, numchild = child.numchild, in_scope = True)
+					v.children[child.exp] = childv
+					self._vars[childv.name] = childv 
+					self.var_path_expr(child.name, sync = sync)
+					self.var_eval(child.name, sync = sync)
 		return self.controller.var_list_children(name, on_response = on_response, sync = sync)
-	def var_eval(self, name):
+	def var_eval(self, name, sync = False):
 		def on_response(response):
 			v = self.get_watched_var(name)
 			if v is not None:
 				v.value = response.value
 				self._update_var(v, response)
-		return self.controller.var_eval(name, on_response = on_response)
+				return v.value
+		return self.controller.var_eval(name, on_response = on_response, sync = sync)
 	def var_path_expr(self, name, sync = False):
 		def on_response(response):
 			v = self.get_watched_var(name)
-			v.var_path = response.get('path_expr', None)
+			v.path_expr = response.get('path_expr', None)
+			return v.path_expr
 		return self.controller.var_path_expr(name, on_response = on_response, sync = sync)
 
 if __name__ == '__main__':
