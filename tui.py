@@ -14,18 +14,6 @@ import logging
 import time
 import subprocess
 
-def acc(func, seq, initial = None):
-	if initial is not None:
-		yield initial
-	acc = initial
-
-	for x in seq:
-		if acc is None:
-			acc = x
-		else:
-			acc = func(acc, x)
-		yield acc
-
 class Settings(object):
 	
 	COLOR_DEFAULT = (curses.COLOR_WHITE, curses.COLOR_BLACK)
