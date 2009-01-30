@@ -3,7 +3,7 @@
 import pygdb
 from event import EventSlot, EventQueue
 import piped_event
-from curses_mvc import View, TopLevelView, Controller
+from curses_mvc import View, TopLevelView, Controller, KeyboardController, KeyboardActions
 from curses_mvc_widgets import NamedPanel, LayoutView, CommandPanel, LogView
 
 import os
@@ -53,7 +53,7 @@ class Settings(object):
 	def attr(self, name):
 		return getattr(self, "ATTR_%s" % name) | curses.color_pair(getattr(self, "PAIR_%s" % name))
 	
-class SourceFileView(View):
+class SourceView(View):
 
 	TABSTOP = 4
 
@@ -101,7 +101,7 @@ class SourceFileView(View):
 			endoff = startoff + maxy
 			endline = endoff + 1
 			maxndigits = len(str(len(self.src_line_data)))
-			self.log.debug("SourceFileView : size (%d, %d) - startoff %d - endoff %d" % (maxy, maxx, startoff, endoff))
+			self.log.debug("SourceView : size (%d, %d) - startoff %d - endoff %d" % (maxy, maxx, startoff, endoff))
 			visible_lines = self.src_line_data[startoff:endoff]
 			self.log.debug("SRC LINE : %s" % self.src_line)
 			for i in xrange(len(visible_lines)):
@@ -131,12 +131,12 @@ class SourceFileView(View):
 			f.close()
 	
 	def onBreakpointSet(self, breakpoint_desc):
-		log.debug("EVENT : SourceFileView << onBreakPointSet")
+		log.debug("EVENT : SourceView << onBreakPointSet")
 		self.dirty = True
 
 	def onFrameChange(self, frame):
 		self.dirty = True
-		log.debug("EVENT : SourceFileView << onFrameChange")
+		log.debug("EVENT : SourceView << onFrameChange")
 		if hasattr(frame, 'fullname'):
 			self.update_src_file(frame.fullname)
 		elif hasattr(frame, 'file'):
@@ -163,6 +163,15 @@ class SourceFileView(View):
 		self.dirty = True
 		self.draw()
 		self.refresh()
+
+class SourceViewKbActions(KeyboardActions):
+	ACTIONS = {
+		'KEY_UP': lambda self: self.src_view.scroll_up(),
+		'KEY_DOWN': lambda self: self.src_view.scroll_down()
+	}
+	
+	def __init__(self, src_view):
+		self.src_view = src_view
 
 class WatchView(View):
 
@@ -209,33 +218,43 @@ class TopLevelKeyboardInput(Controller):
 		self.app = gdbtui.app
 		self.gdbtui = gdbtui
 		self.win = win
-		self._process = True
-		self.kb_poll_thread = threading.Thread(target = self._poll)
-		self.kb_poll_thread.setDaemon(True)
-		self.kb_poll_thread.start()
 
 	ACTIONS = {
-		'R': lambda self: self.gdbtui.commandHandler.onRun(),
-		'C': lambda self: self.gdbtui.commandHandler.onContinue(),
-		'n': lambda self: self.gdbtui.commandHandler.onNext(),
-		's': lambda self: self.gdbtui.commandHandler.onStep(),
-		'b': lambda self: self.gdbtui.commandHandler.onBreak(),
-		'q': lambda self: self.gdbtui.commandHandler.onQuit(),
-		';': lambda self: self.gdbtui.commandHandler.onStartInput(mode='python'),
-		'!': lambda self: self.gdbtui.commandHandler.onStartInput(mode='gdb'),
-		':': lambda self: self.gdbtui.commandHandler.onStartInput(mode='quick'),
-		'o': lambda self: self.gdbtui.commandHandler.onStartPythonShell(),
-		'KEY_F(2)': lambda self: self.gdbtui.commandHandler.onStartShell(),
-		'KEY_F(8)': lambda self: self.gdbtui.commandHandler.onPopoutLog("session.log"),
-		'KEY_F(9)': lambda self: self.gdbtui.commandHandler.onPopoutLog("gdbout.log"),
-		'KEY_F(10)': lambda self: self.gdbtui.commandHandler.onPopoutLog("gdbin.log"),
-		'KEY_RESIZE': lambda self: self.gdbtui.commandHandler.onResize(),
-		'KEY_UP': lambda self: self.gdbtui.commandHandler.onScrollUp(),
-		'KEY_DOWN': lambda self: self.gdbtui.commandHandler.onScrollDown(),
-		'\t': lambda self: self.gdbtui.commandHandler.onFlipFocus(+1),
-		'KEY_BTAB': lambda self: self.gdbtui.commandHandler.onFlipFocus(-1),
+		'R': lambda self: self.app.gdb.run(),
+		'C': lambda self: self.app.gdb.cont(),
+		'n': lambda self: self.app.gdb.next(),
+		's': lambda self: self.app.gdb.step(),
+		'B': lambda self: self.app.gdb.setbreak(loc='main'),
+		'b': lambda self: self.app.gdb.setbreak(),
+		'q': lambda self: self.app.quit(),
+		'!': lambda self: self.startInput(mode='gdb'),
+		';': lambda self: self.startInput(mode='python'),
+		':': lambda self: self.startInput(mode='quick'),
+		'o': lambda self: self.app.switch_mode('PYSHELL'),
+		'KEY_F(2)': lambda self: self.app.switch_mode('SHELL'),
+		'KEY_F(8)': lambda self: self.popoutLog("session.log"),
+		'KEY_F(9)': lambda self: self.popoutLog("gdbout.log"),
+		'KEY_F(10)': lambda self: self.popoutLog("gdbin.log"),
+		'KEY_RESIZE': lambda self: self.gdbtui.handleResize(),
+		'\t': lambda self: self.gdbtui.layout.flip_focus(+1, True),
+		'KEY_BTAB': lambda self: self.gdbtui.layout.flip_focus(-1, True),
 	}
 
+	def startInput(self, mode):
+		cmd = self.gdbtui.commandPanel.input()
+		try:
+			if mode == 'python':
+				res = self.gdb.runCommand(cmd)
+			elif mode == 'gdb':
+				res = self.gdb.runGdbCommand(cmd)
+			elif mode == 'quick':
+				res = self.gdb.runQuickCommand(cmd)
+		except Exception, e:
+			self.gdbtui.commandPanel.disperr(e.message)	
+	
+	def popoutLog(self, path):
+		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", path])	
+	
 	def _poll(self):
 		while True:
 			if self._process:
@@ -323,7 +342,7 @@ class CommandHandler(object):
 	def _onFlipFocus(self, dir):
 		self.gdbtui.log.debug("TOGGLING FOCUS")
 		self.gdbtui.layout.flip_focus(dir, True)
-		self.gdbtui.log.debug("ACTIVE VIEW : %s" % self.gdbtui.layout._active_view)
+		self.gdbtui.log.debug("ACTIVE VIEW : %s" % self.gdbtui.layout.active_view)
 
 	def _onStartPythonShell(self):
 		self.app.switch_mode('PYSHELL')
@@ -354,7 +373,7 @@ class PyGdbTui(TopLevelView):
 		
 		# Views
 		self.src_view_panel = NamedPanel("<source>")
-		self.src_view = SourceFileView(self)
+		self.src_view = SourceView(self)
 		self.src_view_panel.set_inner(self.src_view)
 	
 		self.watch_panel = NamedPanel("watch")

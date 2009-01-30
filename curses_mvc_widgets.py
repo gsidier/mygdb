@@ -60,6 +60,9 @@ def acc(func, seq, initial = None):
 		yield acc
 
 class LayoutView(View):
+	
+	active_view = property(lambda self: self._active_view)
+	
 	def __init__(self, parent, win, orientation = 'H'):
 		View.__init__(self, parent, win)
 		self.orientation = orientation.strip().upper()
