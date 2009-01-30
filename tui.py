@@ -3,12 +3,13 @@
 import pygdb
 from event import EventSlot, EventQueue
 import piped_event
-from curses_mvc import View, TopLevelView, Controller, KeyboardController, KeyboardActions
+from curses_mvc import View, TopLevelView, Controller, KeyboardController, KeyboardActions, BubblingKeyboardController
 from curses_mvc_widgets import NamedPanel, LayoutView, CommandPanel, LogView
 
 import os
 import curses
 from curses.wrapper import wrapper
+
 import threading
 import logging
 import time
@@ -169,7 +170,6 @@ class SourceViewKbActions(KeyboardActions):
 		'KEY_UP': lambda self: self.src_view.scroll_up(),
 		'KEY_DOWN': lambda self: self.src_view.scroll_down()
 	}
-	
 	def __init__(self, src_view):
 		self.src_view = src_view
 
@@ -213,19 +213,25 @@ class WatchView(View):
 	def onWatchUpdate(self, v):
 		self.dirty = True
 
-class TopLevelKeyboardInput(Controller):
+class WatchViewKbActions(KeyboardActions):
+	ACTIONS = {
+	}
+	def __init__(self, watch_view):
+		self.watch_view = watch_view
+
+class TopLevelKeyboardInput(KeyboardActions):
 	def __init__(self, gdbtui, win):
 		self.app = gdbtui.app
 		self.gdbtui = gdbtui
 		self.win = win
 
 	ACTIONS = {
-		'R': lambda self: self.app.gdb.run(),
-		'C': lambda self: self.app.gdb.cont(),
-		'n': lambda self: self.app.gdb.next(),
-		's': lambda self: self.app.gdb.step(),
-		'B': lambda self: self.app.gdb.setbreak(loc='main'),
-		'b': lambda self: self.app.gdb.setbreak(),
+		'R': lambda self: self.app.sess.run(),
+		'C': lambda self: self.app.sess.cont(),
+		'n': lambda self: self.app.sess.next(),
+		's': lambda self: self.app.sess.step(),
+		'B': lambda self: self.app.sess.setbreak(loc='main'),
+		'b': lambda self: self.app.sess.setbreak(),
 		'q': lambda self: self.app.quit(),
 		'!': lambda self: self.startInput(mode='gdb'),
 		';': lambda self: self.startInput(mode='python'),
@@ -244,31 +250,16 @@ class TopLevelKeyboardInput(Controller):
 		cmd = self.gdbtui.commandPanel.input()
 		try:
 			if mode == 'python':
-				res = self.gdb.runCommand(cmd)
+				res = self.app.sess.runCommand(cmd)
 			elif mode == 'gdb':
-				res = self.gdb.runGdbCommand(cmd)
+				res = self.app.sess.runGdbCommand(cmd)
 			elif mode == 'quick':
-				res = self.gdb.runQuickCommand(cmd)
+				res = self.app.sess.runQuickCommand(cmd)
 		except Exception, e:
 			self.gdbtui.commandPanel.disperr(e.message)	
 	
 	def popoutLog(self, path):
 		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", path])	
-	
-	def _poll(self):
-		while True:
-			if self._process:
-				curses.halfdelay(2)
-				try:
-					c = self.win.getkey()
-					log.debug("KEY PRESSED : '%s'" % c)
-					if self.ACTIONS.has_key(c):
-						self.ACTIONS[c](self)
-						self.gdbtui.commandHandler.onProcessed()
-				except:
-					pass
-			else:
-				time.sleep(.2)
 
 	def get_focus(self, function):
 		self._process = False
@@ -276,82 +267,6 @@ class TopLevelKeyboardInput(Controller):
 		self._process = True
 		return res	
 
-class CommandHandler(object):
-	def __init__(self, gdbtui, gdb, commandPanel):
-		self.app = gdbtui.app
-		self.gdbtui = gdbtui
-		self.gdb = gdb
-		self.commandPanel = commandPanel
-		self.commandQueue = EventQueue(vsync = 1e-3)
-		self.onRun = self.commandQueue.schedule_handler(self._onRun)
-		self.onContinue = self.commandQueue.schedule_handler(self._onContinue)
-		self.onNext = self.commandQueue.schedule_handler(self._onNext)
-		self.onStep = self.commandQueue.schedule_handler(self._onStep)
-		self.onBreak = self.commandQueue.schedule_handler(self._onBreak)
-		self.onQuit = self.commandQueue.schedule_handler(self._onQuit)
-		self.onStartInput = self.commandQueue.schedule_handler(self._onStartInput)
-		self.onStartPythonShell = self.commandQueue.schedule_handler(self._onStartPythonShell)
-		self.onStartShell = self.commandQueue.schedule_handler(self._onStartShell)
-
-		self.onProcessed = self.commandQueue.schedule_handler(self._onProcessed)
-
-		self.onResize = self.commandQueue.schedule_handler(self._onResize)
-	
-		self.onScrollUp = self.commandQueue.schedule_handler(self._onScrollUp)
-		self.onScrollDown = self.commandQueue.schedule_handler(self._onScrollDown)
-		
-		self.onFlipFocus = self.commandQueue.schedule_handler(self._onFlipFocus)
-
-		self.onPopoutLog = self.commandQueue.schedule_handler(self._onPopoutLog)
-
-	def _onRun(self):
-		self.gdb.run()
-	def _onContinue(self):
-		self.gdb.cont()
-	def _onStep(self):
-		self.gdb.step()
-	def _onNext(self):
-		self.gdb.next()
-	def _onBreak(self):
-		self.gdb.setbreak(loc='main')
-	def _onQuit(self):
-		self.app.quit()
-	def _onStartInput(self, mode):
-		cmd = self.commandPanel.input()
-		try:
-			if mode == 'python':
-				res = self.gdb.runCommand(cmd)
-			elif mode == 'gdb':
-				res = self.gdb.runGdbCommand(cmd)
-			elif mode == 'quick':
-				res = self.gdb.runQuickCommand(cmd)
-		except Exception, e:
-			self.commandPanel.disperr(e.message)
-	
-	def _onProcessed(self):
-		self.gdb.onProcessed.broadcast()
-	
-	def _onResize(self):
-		self.gdbtui.handleResize()
-
-	def _onScrollDown(self):
-		self.gdbtui.src_view.scroll_down()
-	def _onScrollUp(self):
-		self.gdbtui.src_view.scroll_up()
-
-	def _onFlipFocus(self, dir):
-		self.gdbtui.log.debug("TOGGLING FOCUS")
-		self.gdbtui.layout.flip_focus(dir, True)
-		self.gdbtui.log.debug("ACTIVE VIEW : %s" % self.gdbtui.layout.active_view)
-
-	def _onStartPythonShell(self):
-		self.app.switch_mode('PYSHELL')
-
-	def _onStartShell(self):
-		self.app.switch_mode('SHELL')
-
-	def _onPopoutLog(self, path):
-		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", path])
 
 class PyGdbTui(TopLevelView):
 
@@ -375,10 +290,12 @@ class PyGdbTui(TopLevelView):
 		self.src_view_panel = NamedPanel("<source>")
 		self.src_view = SourceView(self)
 		self.src_view_panel.set_inner(self.src_view)
+		self.src_view_kb = SourceViewKbActions(self.src_view)
 	
 		self.watch_panel = NamedPanel("watch")
 		self.watch_view = WatchView(self)
 		self.watch_panel.set_inner(self.watch_view)
+		self.watch_view_kb = WatchViewKbActions(self.watch_view)
 	
 		upper_layout = LayoutView(None, None, 'H')
 		upper_layout.layout( 
@@ -400,23 +317,28 @@ class PyGdbTui(TopLevelView):
 			(-.35, self.log_view),
 			(   1, self.command_panel ) 
 		)
+		self.toplevel_kb = TopLevelKeyboardInput(self, self.topwin)
 	
-		# Command handler
-		self.commandHandler = CommandHandler(self, self.sess, self.command_panel)
+		### Command handler
+		## self.commandHandler = CommandHandler(self, self.sess, self.command_panel)
+		
+		# Keyboard Input
+		self.kbcontroller = BubblingKeyboardController(self.layout)
+		self.kbcontroller.process_events(False)
+		self.kbcontroller.controllers[self.layout] = self.toplevel_kb
+		self.kbcontroller.controllers[self.src_view] = self.src_view_kb
+		self.kbcontroller.controllers[self.watch_view] = self.watch_view_kb
 		
 		# Events
 		self.onStartCommandInput = EventSlot()
 		
 		# Event Handlers
 		self.sess.onProcessed.subscribe(self.onGdbProcessedResponse)
-		self.scheduled_onGdbProcessedResponse = self.commandHandler.commandQueue.schedule_handler(self._onGdbProcessedResponse)
+		#self.scheduled_onGdbProcessedResponse = self.commandHandler.commandQueue.schedule_handler(self._onGdbProcessedResponse)
 		
-		# Input
-		self.kb_input = TopLevelKeyboardInput(self, self.topwin)
-
 	def onGdbProcessedResponse(self):
-		self.scheduled_onGdbProcessedResponse()
-	def _onGdbProcessedResponse(self):
+		#	self.scheduled_onGdbProcessedResponse()
+		#def _onGdbProcessedResponse(self):
 		self.log.debug("### REFRESH ###")
 		self.update()
 		self.refresh()
@@ -426,13 +348,15 @@ class PyGdbTui(TopLevelView):
 
 
 	def process_events(self):
-		self.kb_input._process = True
-		self.commandHandler.commandQueue.process = True
-		self.commandHandler.commandQueue.run()
+		#self.kb_input._process = True
+		#self.commandHandler.commandQueue.process = True
+		#self.commandHandler.commandQueue.run()
+		self.kbcontroller.process_events(True)
 
 	def stop_events(self):
-		self.kb_input._process = False
-		self.commandHandler.commandQueue.process = False
+		#self.kb_input._process = False
+		#self.commandHandler.commandQueue.process = False
+		self.kbcontroller.proces_events(False)
 
 class App(object):
 	def __init__(self, gdb):
@@ -465,6 +389,8 @@ class App(object):
 		else:
 			self.gdbtui.setwin(win)
 		self.gdbtui.process_events()
+		while self.appmode == 'TUI':
+			time.sleep(.2)
 
 	def run_pyshell(self):
 		from IPython.Shell import IPShellEmbed

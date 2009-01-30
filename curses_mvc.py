@@ -8,6 +8,7 @@ from curses.wrapper import wrapper
 import threading
 import time
 
+import logging
 
 class View(object):
 
@@ -121,11 +122,16 @@ class BubblingController(Controller):
 		self.layout_view = layout_view
 	
 	def on_event(self, evt):
+		log = logging.getLogger("gdb") # DELME
 		V = self.layout_view.active_view
+		if V is None:
+			V = self.layout_view
 		handled = False
-		while V is not None and not handled:
+		while not handled:
+			log.debug("SENDING KEY EVENT TO %s" % str(V)) # DELME
 			C = self.controllers.get(V, None)
 			if C is not None:
+				log.debug("FOUND CONTROLLER %s" % str(C)) # DELME
 				handled = C.on_event(evt)
 			if handled or V == self.layout_view: 
 				# don't bubble higher than original layout view
@@ -133,36 +139,43 @@ class BubblingController(Controller):
 			V = V.parent
 		return handled
 	
-def KeyboardController(Controller):
+class KeyboardController(Controller):
 	"""
 	Starts a thread to poll for keyboard events.
 	This class should be subclassed to define the event handling function on_event.
 	"""
 	
-	def __init__(self):
+	def __init__(self, win):
 		self._process = True
 		self.kb_poll_thread = threading.Thread(target = self._poll)
 		self.kb_poll_thread.setDaemon(True)
 		self.kb_poll_thread.start()
+		self.win = win
 
 	def _poll(self):
+		log = logging.getLogger("gdb") # DELME
 		while True:
 			if self._process:
+				log.debug("KB CONTROLLER : polling for keys...") # DELME
 				curses.halfdelay(2)
 				try:
 					c = self.win.getkey()
+					log.debug("KB CONTROLLER : got '%s'" % c) # DELME 
 					self.on_event(c)
-				except:
-					pass
+				except Exception, e:
+					#pass
+					log.debug("KB CONTROLLER EXCEPTION : (%s) %s" % (type(e), e.message)) # DELME
 			else:
-				time.sleep(.2)
+				time.sleep(.02)
 
 	def get_focus(self, function):
 		self._process = False
 		res = function()
 		self._process = True
-		return res	
-
+		return res
+	
+	def process_events(self, flag):
+		self._process = flag
 
 class KeyboardActions(Controller):
 	"""
@@ -174,7 +187,14 @@ class KeyboardActions(Controller):
 	
 
 	def on_event(self, evt):
+		log = logging.getLogger("gdb") # DELME
 		handler = self.ACTIONS.get(evt, None)
+		log.debug("KB ACTIONS found handler %s" % handler) # DELME
 		if handler is not None:
 			handler(self)
+
+class BubblingKeyboardController(BubblingController, KeyboardController):
+	def __init__(self, layout_view):
+		BubblingController.__init__(self, layout_view)
+		KeyboardController.__init__(self, layout_view.win)
 
