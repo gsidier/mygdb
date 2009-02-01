@@ -356,7 +356,7 @@ class PyGdbTui(TopLevelView):
 	def stop_events(self):
 		#self.kb_input._process = False
 		#self.commandHandler.commandQueue.process = False
-		self.kbcontroller.proces_events(False)
+		self.kbcontroller.process_events(False)
 
 class App(object):
 	def __init__(self, gdb):
@@ -378,9 +378,7 @@ class App(object):
 				self.run_shell()
 
 	def quit(self):
-		if self.appmode == 'TUI':
-			self.gdbtui.stop_events()
-		self.appmode = 'QUIT'
+		self.switch_mode('QUIT')
 	
 	def run_tui(self, win):
 		curses.curs_set(0)
@@ -390,7 +388,8 @@ class App(object):
 			self.gdbtui.setwin(win)
 		self.gdbtui.process_events()
 		while self.appmode == 'TUI':
-			time.sleep(.2)
+			self.log.debug("MODE: %s" % self.appmode)
+			time.sleep(.1)
 
 	def run_pyshell(self):
 		from IPython.Shell import IPShellEmbed
