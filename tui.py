@@ -143,9 +143,9 @@ class SourceView(View):
 		elif hasattr(frame, 'file'):
 			self.update_src_file(frame.file)
 		if hasattr(frame, 'file'):
-			self.gdbtui.src_view_panel.name = frame.file
+			self.gdbtui.src_panel.name = frame.file
 		elif hasattr(frame, 'fullname'):
-			self.gdbtui.src_view_panel.name = frame.fullname
+			self.gdbtui.src_panel.name = frame.fullname
 		if hasattr(frame, 'line'):
 			self.src_line = int(frame.line)
 			self.log.debug("CURRENT LINE : %d" % self.src_line)
@@ -265,7 +265,12 @@ class TopLevelKeyboardInput(KeyboardActions):
 		self._process = False
 		res = function()
 		self._process = True
-		return res	
+		return res
+
+	def on_event(self, key):
+		KeyboardActions.on_event(self, key)
+		self.gdbtui.update()
+		self.gdbtui.refresh()
 
 
 class PyGdbTui(TopLevelView):
@@ -287,9 +292,9 @@ class PyGdbTui(TopLevelView):
 		self.topwin.bkgd( curses.color_pair(self.settings.PAIR_DEFAULT) )
 		
 		# Views
-		self.src_view_panel = NamedPanel("<source>")
+		self.src_panel = NamedPanel("<source>")
 		self.src_view = SourceView(self)
-		self.src_view_panel.set_inner(self.src_view)
+		self.src_panel.set_inner(self.src_view)
 		self.src_view_kb = SourceViewKbActions(self.src_view)
 	
 		self.watch_panel = NamedPanel("watch")
@@ -299,7 +304,7 @@ class PyGdbTui(TopLevelView):
 	
 		upper_layout = LayoutView(None, None, 'H')
 		upper_layout.layout( 
-			(-.6, self.src_view_panel), 
+			(-.6, self.src_panel), 
 			(-.4, self.watch_panel) 
 		)
 		
@@ -326,8 +331,8 @@ class PyGdbTui(TopLevelView):
 		self.kbcontroller = BubblingKeyboardController(self.layout)
 		self.kbcontroller.process_events(False)
 		self.kbcontroller.controllers[self.layout] = self.toplevel_kb
-		self.kbcontroller.controllers[self.src_view] = self.src_view_kb
-		self.kbcontroller.controllers[self.watch_view] = self.watch_view_kb
+		self.kbcontroller.controllers[self.src_panel] = self.src_view_kb
+		self.kbcontroller.controllers[self.watch_panel] = self.watch_view_kb
 		
 		# Events
 		self.onStartCommandInput = EventSlot()
