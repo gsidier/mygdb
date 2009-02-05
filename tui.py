@@ -247,7 +247,9 @@ class TopLevelKeyboardInput(KeyboardActions):
 	}
 
 	def startInput(self, mode):
-		cmd = self.gdbtui.commandPanel.input()
+		self.gdbtui.stop_events()
+		cmd = self.gdbtui.command_panel.input()
+		self.gdbtui.process_events()
 		try:
 			if mode == 'python':
 				res = self.app.sess.runCommand(cmd)
@@ -256,7 +258,7 @@ class TopLevelKeyboardInput(KeyboardActions):
 			elif mode == 'quick':
 				res = self.app.sess.runQuickCommand(cmd)
 		except Exception, e:
-			self.gdbtui.commandPanel.disperr(e.message)	
+			self.gdbtui.command_panel.disperr(e.message)	
 	
 	def popoutLog(self, path):
 		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", path])	
@@ -314,7 +316,7 @@ class PyGdbTui(TopLevelView):
 		self.log_view.addLog(logging.getLogger('gdbin'), curses_format = self.settings.attr('LOG_GDBIN'))
 		self.log_view.addLog(logging.getLogger('gdberr'), curses_format = self.settings.attr('LOG_GDBERR'))
 
-		self.command_panel = CommandPanel(self)
+		self.command_panel = CommandPanel()
 	
 		self.layout = LayoutView(self, self.topwin, 'V')
 		self.layout.layout( 

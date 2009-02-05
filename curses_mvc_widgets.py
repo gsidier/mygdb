@@ -167,17 +167,15 @@ class LayoutView(View):
 
 
 class CommandPanel(View):
-	def __init__(self, gdbtui, parent = None, win = None):
+	def __init__(self, parent = None, win = None):
 		View.__init__(self, parent, win)
-		self.app = gdbtui.app
-		self.gdbtui = gdbtui
 		self.win = win
 		
 	def input(self):
 		self.win.clear()
 		curses.curs_set(1)
 		curses.echo()
-		cmd = self.gdbtui.kb_input.get_focus(lambda: self.win.getstr())
+		cmd = self.win.getstr() # self.gdbtui.kb_input.get_focus(lambda: self.win.getstr())
 		curses.noecho()
 		curses.curs_set(0)
 		return cmd
