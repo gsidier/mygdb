@@ -236,5 +236,6 @@ class LogView(View):
 		for line in text.splitlines(): 
 			self.win.scroll()
 			self.win.addnstr(maxy - 1, 0, line, maxx)
+		self.win.refresh()
 
 
