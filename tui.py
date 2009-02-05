@@ -238,9 +238,9 @@ class TopLevelKeyboardInput(KeyboardActions):
 		'o': lambda self: self.app.switch_mode('PYSHELL'),
 		'KEY_F(2)': lambda self: self.app.switch_mode('SHELL'),
 		'KEY_F(5)': lambda self: self.refresh_screen(),
-		'KEY_F(8)': lambda self: self.popoutLog("session.log"),
-		'KEY_F(9)': lambda self: self.popoutLog("gdbout.log"),
-		'KEY_F(10)': lambda self: self.popoutLog("gdbin.log"),
+		'KEY_F(8)': lambda self: self.popoutLog("session.log", "session log"),
+		'KEY_F(9)': lambda self: self.popoutLog("gdbout.log", "gdb output"),
+		'KEY_F(10)': lambda self: self.popoutLog("gdbin.log", "gdb input"),
 		'KEY_RESIZE': lambda self: self.gdbtui.handleResize(),
 		'\t': lambda self: self.gdbtui.layout.flip_focus(+1, True),
 		'KEY_BTAB': lambda self: self.gdbtui.layout.flip_focus(-1, True),
@@ -260,8 +260,8 @@ class TopLevelKeyboardInput(KeyboardActions):
 		except Exception, e:
 			self.gdbtui.command_panel.disperr(e.message)	
 	
-	def popoutLog(self, path):
-		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-F", path])	
+	def popoutLog(self, path, title = "mygdb"):
+		xterm = subprocess.Popen(["xterm", "-title", title, "+hold", "-e", "tail", "-F", path])	
 
 	def refresh_screen(self):
 		self.gdbtui.win.clear()
@@ -320,6 +320,7 @@ class PyGdbTui(TopLevelView):
 		self.log_view.addLog(logging.getLogger('gdbout'), curses_format = self.settings.attr('LOG_GDBOUT'))
 		self.log_view.addLog(logging.getLogger('gdbin'), curses_format = self.settings.attr('LOG_GDBIN'))
 		self.log_view.addLog(logging.getLogger('gdberr'), curses_format = self.settings.attr('LOG_GDBERR'))
+		self.log_view.addLog(logging.getLogger('targetout'), curses_format = self.settings.attr('LOG_TARGETOUT'))
 
 		self.command_panel = CommandPanel()
 	
@@ -450,16 +451,29 @@ if __name__ == '__main__':
 	gdberrlog.addHandler(gdberrlog2session)
 	gdberrlog.setLevel(logging.DEBUG)
 
+	targetout_path = "targetout.log"
+	targetoutlog = logging.getLogger("targetout")
+	targetoutlog.addHandler(logging.FileHandler(targetout_path))
+	targetoutlog2session = logging.FileHandler(sessionlog_path)
+	targetoutlog2session.setFormatter(logging.Formatter('TARGET OUT> %(message)s'))
+	targetoutlog.addHandler(targetoutlog2session)
+	targetoutlog.setLevel(logging.DEBUG)
+
+	## Redirect stderr to file
+	
+	#errlog = file("err.log", "w")
+	#sys.stderr = errlog	
+		
+	## Startup app
+
 	gdb = pygdb.GdbMI()
 	app = App(gdb)
-	#
 	
 	if len(sys.argv) > 1:
 		app.sess.file(*sys.argv[1:])
 	else:
 		app.sess.file('hello')
 
-	#
 	app.run()
 
 
