@@ -114,30 +114,6 @@ class WatchedVar(object):
 	def __str__(self):
 		return self.__repr__()
 
-class VarWatcher(object):
-	def __init__(self, gdbsess, var, toplevel = True):
-		self.gdbsess = gdbsess
-		self.var = var
-		self.gdbsess.add_var_watcher(self.var, self, toplevel)
-
-	def __del__(self):
-		self.gdbsess.remove_var_watcher(self.var, self)
-
-	def onUpdate(self, var, upd):
-		pass
-
-class PlainWatch(VarWatcher):
-
-	def __init__(self, gdbsess, var):
-		VarWatcher.__init__(self, gdbsess, var)
-	
-	def onUpdate(self, var, upd):
-		if var is not None:
-			if hasattr(upd, 'value'):
-				var.value = upd.value
-			if hasattr(upd, 'in_scope'):
-				var.in_scope = upd.in_scope == 'true'
-
 class GdbSession(object):
 
 	class MyGdbController(GdbController):
@@ -165,8 +141,12 @@ class GdbSession(object):
 			# MUST come last
 			GdbController._send(self, command, token=token)
 			if sync:
+				TIMEOUT = 1.
+				t0 = time.time()
 				while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
 					time.sleep(0.01)
+					if time.time() - t0 > TIMEOUT:
+						raise Exception, "Timeout : request %s" % token
 				return on_response_sync.response
 	
 	def __init__(self, gdbinst):
@@ -230,7 +210,7 @@ class GdbSession(object):
 			else:
 				self.log.debug("TOKEN NOT FOUND: %s" % repr(token))
 		
-			self.log.debug("[%s] RESULTS = %s", resultClass, results)
+			self.log.debug("[%s:%s] RESULTS = %s", token, resultClass, results)
 			
 			# Event based handlers
 			if hasattr(results, 'thread-id'):
@@ -369,7 +349,6 @@ class GdbSession(object):
 		def on_response(response):
 			self.log.debug("VAR CREATE : %s" % response)
 			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.get('value'), numchild = response.numchild, in_scope = True)
-			w = PlainWatch(self, v)
 			self._watch[v.name] = v
 			self._vars[v.name] = v
 			self.log.debug("WATCHLIST : %s" % self._watch)
