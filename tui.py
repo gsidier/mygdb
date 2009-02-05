@@ -208,7 +208,7 @@ class WatchView(View):
 				if v.children is not None:
 					i = rec(v.children, i, j + self.TAB)
 			return i
-		rec(self.app.sess._watch, 0, 0)	
+		rec(self.app.sess._watchers, 0, 0)	
 
 	def onWatchUpdate(self, v):
 		self.dirty = True
