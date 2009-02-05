@@ -60,7 +60,7 @@ class AbstractVar(object):
 		return self.var.numchild
 	
 	def _in_scope(self):
-		return self.var._in_scope
+		return self.var.in_scope
 	
 	def _wrap(self, var):
 		return AbstractVar(self.gdbsess, var)
