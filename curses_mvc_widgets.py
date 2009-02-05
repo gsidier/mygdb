@@ -37,7 +37,7 @@ class NamedPanel(View):
 	def refresh(self):
 		self.win.refresh()
 	
-	def draw(self):
+	def draw(self, force = False):
 		if self._has_focus:
 			self.win.attron(curses.A_BOLD)
 		self.win.border()
@@ -180,7 +180,7 @@ class CommandPanel(View):
 		curses.curs_set(0)
 		return cmd
 	
-	def draw(self):
+	def draw(self, force = False):
 		pass #self.win.clear()
 
 	def disperr(self, errmsg):

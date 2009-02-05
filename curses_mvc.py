@@ -44,14 +44,16 @@ class View(object):
 			c.delwin()
 		self.win = None
 
-	def update(self):
+	def update(self, force = False):
 		"""
 		Redraw the view and its subcomponents to the content buffer.
 		Recursively calls draw() on this view and it's subviews.
+		
+		If the force parameter is True, then force a full update of the buffer even if the component doesn't think it needs it.
 		"""
 		for c in self.components:
-			c.update()
-		self.draw()
+			c.update(force)
+		self.draw(force)
 	
 	def refresh(self):
 		"""
@@ -61,12 +63,12 @@ class View(object):
 		for c in self.components:
 			c.refresh()
 	
-	def draw(self):
+	def draw(self, force = False):
 		"""
-		Draw the view to the content buffer.
+		Draw the view to the content buffer. If force is True, then force a full redraw.
 		"""
 		pass
-
+	
 	def accept_focus(self):
 		return True
 
@@ -77,7 +79,7 @@ class View(object):
 		self.win.erase()
 		for c in self.components:
 			c.resize()
-		self.draw()
+		self.draw(True)
 	
 	def handle_key(self, k):
 		"""
