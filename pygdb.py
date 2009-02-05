@@ -33,6 +33,7 @@ class GdbController(GdbCommandBuilder):
 		self.gdblog = logging.getLogger("gdbout") # log what comes out of gdb
 		self.gdbinlog = logging.getLogger("gdbin") # log what goes into gdb
 		self.gdberrlog = logging.getLogger("gdberr") # log gdb errors
+		self.targetlog = logging.getLogger("targetout") # log target output
 	
 		self.output_hist = []
 		self.target_hist = []
@@ -94,7 +95,8 @@ class GdbController(GdbCommandBuilder):
 		while True:
 			line = stream.readline()
 			if line == '': break
-			self.log.debug("TARGET says: %s" % line)
+			#self.log.debug("TARGET says: %s" % line)
+			self.targetlog.debug(line)
 			self.target_hist.append(line)
 		self.log.debug("(TARGET stdout : closes)")
 
@@ -425,6 +427,14 @@ if __name__ == '__main__':
 	gdberrlog2session.setFormatter(logging.Formatter('GDB ERR> %(message)s'))
 	gdberrlog.addHandler(gdberrlog2session)
 	gdberrlog.setLevel(logging.DEBUG)
+
+	targetout_path = "targetout.log"
+	targetoutlog = logging.getLogger("targetout")
+	targetoutlog.addHandler(logging.FileHandler(targetout_path))
+	targetoutlog2session = logging.FileHandler(sessionlog_path)
+	targetoutlog2session.setFormatter(logging.Formatter('TARGET OUT> %(message)s'))
+	targetoutlog.addHandler(targetoutlog2session)
+	targetoutlog.setLevel(logging.DEBUG)
 
 	g = GdbMI()
 	gin,gout,gerr = g.gdbin,g.gdbout,g.gdberr
