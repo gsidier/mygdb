@@ -6,6 +6,7 @@ import piped_event
 from curses_mvc import View, TopLevelView, Controller, KeyboardController, KeyboardActions, BubblingKeyboardController
 from curses_mvc_widgets import NamedPanel, LayoutView, CommandPanel, LogView
 
+import sys
 import os
 import curses
 from curses.wrapper import wrapper
@@ -88,8 +89,8 @@ class SourceView(View):
 		# and 0-based in buffers
 		return buf[lineno - 1]
 
-	def draw(self):
-		if self.dirty and self.win is not None: 
+	def draw(self, force = False):
+		if (force or self.dirty) and self.win is not None: 
 			maxy, maxx = self.win.getmaxyx()
 			self.win.clear()
 			# if src_line is of the screen then recenter view so that src_line is approx 1/5th down from top of screen
@@ -154,15 +155,13 @@ class SourceView(View):
 
 	def scroll_down(self):
 		self.line_off += 1
-		self.dirty = True
-		self.draw()
+		self.draw(True)
 		self.refresh()
 
 	def scroll_up(self):
 		self.line_off -= 1
 		self.line_off = max(0, self.line_off)
-		self.dirty = True
-		self.draw()
+		self.draw(True)
 		self.refresh()
 
 class SourceViewKbActions(KeyboardActions):
@@ -183,9 +182,9 @@ class WatchView(View):
 		self.gdbtui = gdbtui
 		self.dirty = False
 		self.app.sess.onWatchUpdate.subscribe(self.onWatchUpdate)
-	
-	def draw(self):
-		if not self.dirty:
+
+	def draw(self, force = False):
+		if not (force or self.dirty):
 			return
 		self.win.erase()
 		maxy, maxx = self.win.getmaxyx()
@@ -238,6 +237,7 @@ class TopLevelKeyboardInput(KeyboardActions):
 		':': lambda self: self.startInput(mode='quick'),
 		'o': lambda self: self.app.switch_mode('PYSHELL'),
 		'KEY_F(2)': lambda self: self.app.switch_mode('SHELL'),
+		'KEY_F(5)': lambda self: self.refresh_screen(),
 		'KEY_F(8)': lambda self: self.popoutLog("session.log"),
 		'KEY_F(9)': lambda self: self.popoutLog("gdbout.log"),
 		'KEY_F(10)': lambda self: self.popoutLog("gdbin.log"),
@@ -262,6 +262,11 @@ class TopLevelKeyboardInput(KeyboardActions):
 	
 	def popoutLog(self, path):
 		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", path])	
+
+	def refresh_screen(self):
+		self.gdbtui.win.clear()
+		self.gdbtui.update(True)
+		self.gdbtui.refresh()
 
 	def get_focus(self, function):
 		self._process = False
@@ -395,7 +400,6 @@ class App(object):
 			self.gdbtui.setwin(win)
 		self.gdbtui.process_events()
 		while self.appmode == 'TUI':
-			self.log.debug("MODE: %s" % self.appmode)
 			time.sleep(.1)
 
 	def run_pyshell(self):
@@ -449,7 +453,12 @@ if __name__ == '__main__':
 	gdb = pygdb.GdbMI()
 	app = App(gdb)
 	#
-	app.sess.file('hello')
+	
+	if len(sys.argv) > 1:
+		app.sess.file(*sys.argv[1:])
+	else:
+		app.sess.file('hello')
+
 	#
 	app.run()
 
