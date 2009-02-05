@@ -12,6 +12,7 @@ import recparse
 import gdbmi_output_parser
 from gdb_commands import GdbCommandBuilder
 from event import EventSlot, EventQueue
+from watch import FilteredWatch
 
 class GdbMI(object):
 	def __init__(self):	
@@ -114,8 +115,7 @@ class WatchedVar(object):
 		return self.__repr__()
 
 class VarWatcher(object):
-	def __init__(self, gdbsess, var, type, toplevel = True):
-		self.TYPE = type
+	def __init__(self, gdbsess, var, toplevel = True):
 		self.gdbsess = gdbsess
 		self.var = var
 		self.gdbsess.add_var_watcher(self.var, self, toplevel)
@@ -129,7 +129,7 @@ class VarWatcher(object):
 class PlainWatch(VarWatcher):
 
 	def __init__(self, gdbsess, var):
-		VarWatcher.__init__(self, gdbsess, var, 'default')
+		VarWatcher.__init__(self, gdbsess, var)
 	
 	def onUpdate(self, var, upd):
 		if var is not None:
@@ -268,14 +268,18 @@ class GdbSession(object):
 		root = var.name.split('.')[0]
 		self._watcher_slots[root].subscribe(watcher.onUpdate)
 		if toplevel:
-			self._watchers[watcher.TYPE][root] = watcher
+			self._watchers[root] = watcher
 
 	def remove_var_watcher(self, var, watcher):
 		root = var.name.split('.')[0]
 		if root in self._watcher_slots:
 			self._watcher_slots.unsubscribe(watcher.onUpdate)
-		if (watcher.TYPE in self._watchers) and (root in self._watchers[watcher.TYPE]):
-			self._watchers.pop(watcher.TYPE)
+		if root in self._watchers:
+			self._watchers.pop(root)
+
+	def add_watch(self, expr):
+		var = self.var_create(expr, sync = True)
+		self.add_var_watcher(var, FilteredWatch(self, var))
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
@@ -309,7 +313,7 @@ class GdbSession(object):
 			'att': self.attach,
 			'b': self.setbreak,
 			'f': self.file, 
-			'w': self.var_create, 
+			'w': self.add_watch, # self.var_create, 
 			'log': lambda str: self.log.debug(str) 
 		})
 		self.onProcessed.broadcast()
