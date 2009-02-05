@@ -158,12 +158,13 @@ class KeyboardController(Controller):
 		log = logging.getLogger("gdb") # DELME
 		while True:
 			if self._process:
-				log.debug("KB CONTROLLER : polling for keys...") # DELME
 				curses.halfdelay(2)
 				try:
 					c = self.win.getkey()
 					log.debug("KB CONTROLLER : got '%s'" % c) # DELME 
 					self.on_event(c)
+				except curses.error:
+					pass
 				except Exception, e:
 					#pass
 					log.debug("KB CONTROLLER EXCEPTION : (%s) %s" % (type(e), e.message)) # DELME

@@ -261,7 +261,7 @@ class TopLevelKeyboardInput(KeyboardActions):
 			self.gdbtui.command_panel.disperr(e.message)	
 	
 	def popoutLog(self, path):
-		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-f", path])	
+		xterm = subprocess.Popen(["xterm", "+hold", "-e", "tail", "-F", path])	
 
 	def refresh_screen(self):
 		self.gdbtui.win.clear()
