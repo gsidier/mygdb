@@ -261,7 +261,9 @@ class GdbSession(object):
 
 	def add_watch(self, expr):
 		var = self.var_create(expr, sync = True)
-		self.add_var_watcher(var, FilteredWatch(self, var))
+		watch = FilteredWatch._wrap(self, var)
+		self.add_var_watcher(var, watch)
+		return watch
 
 	# ========== GDB OUTPUT VISITOR ==========
 	#
