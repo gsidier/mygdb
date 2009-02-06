@@ -9,8 +9,8 @@ class EventSlot(object):
 		self.listeners.add(listener)
 
 	def unsubscribe(self, listener):
-		if foo in self.listeners:
-			self.listeners.remove(foo)
+		if listener in self.listeners:
+			self.listeners.remove(listener)
 
 	def broadcast(self, *args, **kwargs):
 		for listener in self.listeners:
