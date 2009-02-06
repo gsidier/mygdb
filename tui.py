@@ -223,7 +223,8 @@ class TopLevelKeyboardInput(KeyboardActions):
 		self.app = gdbtui.app
 		self.gdbtui = gdbtui
 		self.win = win
-
+		self.gdberrlog = logging.getLogger("gdberr") # log gdb errors
+		
 	ACTIONS = {
 		'R': lambda self: self.app.sess.run(),
 		'C': lambda self: self.app.sess.cont(),
@@ -258,7 +259,8 @@ class TopLevelKeyboardInput(KeyboardActions):
 			elif mode == 'quick':
 				res = self.app.sess.runQuickCommand(cmd)
 		except Exception, e:
-			self.gdbtui.command_panel.disperr(e.message)	
+			#self.gdbtui.command_panel.disperr(e.message)	
+			self.gdberrlog.debug(e.message)
 	
 	def popoutLog(self, path, title = "mygdb"):
 		xterm = subprocess.Popen(["xterm", "-title", title, "+hold", "-e", "tail", "-F", path])	
