@@ -39,7 +39,7 @@ class AbstractVar(object):
 		if self.var.children is None: # still
 			raise Exception, "Var get children failed."
 
-		return dict( (k, self._wrap(v)) for k, v in self.var.children.iteritems() )
+		return dict( (k, self.wrap(v)) for k, v in self.var.children.iteritems() )
 	
 	def __getitem__(self, idx):
 		return self.children[str(idx)]
@@ -62,8 +62,12 @@ class AbstractVar(object):
 	def _in_scope(self):
 		return self.var.in_scope
 	
-	def _wrap(self, var):
-		return AbstractVar(self.gdbsess, var)
+	@classmethod
+	def _wrap(cls, sess, var):
+		return AbstractVar(sess, var)
+	
+	def wrap(self, var):
+		return self._wrap(self.gdbsess, var)
 	
 	def _path_expr(self):
 		return self.gdbsess.var_path_expr(self.var.name, sync = True)
@@ -73,19 +77,20 @@ class AbstractVar(object):
 			
 		v = self.gdbsess.var_create(e, sync = True)
 		self.gdbsess.add_var_watcher(v, self, toplevel = False)
-		return self._wrap(v)
+		return self.wrap(v)
 
 	def onUpdate(self, var, upd):
 		pass
 
 class FilteredWatch(AbstractVar):
-	def _wrap(self, var):
+	@classmethod
+	def _wrap(cls, sess, var):
 		if var.type is not None:
 			if var.type.startswith('std::basic_string<') and var.type[-1] == '>':
-				return StdStringWatch(self.gdbsess, var)
+				return StdStringWatch(sess, var)
 			elif var.type.startswith('std::vector<') and var.type[-1] == '>':
-				return StdVectorWatch(self.gdbsess, var)
-		return FilteredWatch(self.gdbsess, var)
+				return StdVectorWatch(sess, var)
+		return FilteredWatch(sess, var)
 
 
 class StdVectorWatch(FilteredWatch):
