@@ -7,6 +7,7 @@ import time
 import collections
 import logging
 from collections import defaultdict
+import traceback
 
 import recparse
 import gdbmi_output_parser
@@ -23,6 +24,18 @@ class GdbMI(object):
 		self.gdbin = self.proc.stdin
 		self.gdbout = self.proc.stdout
 		self.gdberr = self.proc.stderr
+
+class SafeThread(threading.Thread):
+	def __init__(self, **kwargs):
+		target = kwargs['target']
+		self.errlog = logging.getLogger("gdberr")
+		def safe_target(*args, **kwargs):
+			try:
+				target(*args, **kwargs)
+			except Exception, e:
+				self.errlog.error(traceback.format_exc())
+		kwargs['target'] = safe_target
+		threading.Thread.__init__(self, **kwargs)
 
 class GdbController(GdbCommandBuilder):
 	def __init__(self, gdb_instance, output_handler):
@@ -125,6 +138,16 @@ class GdbSession(object):
 			# MUST come last
 			GdbController.__init__(self, session.gdb, session)
 
+		class SyncCallback(object):
+			def __init__(self, callback):
+				self.callback = callback
+				self.got_response = False
+				self.response = None
+			def __call__(self, *args, **kwargs):
+				self.response = self.callback(*args, **kwargs)
+				self.got_response = True
+				return self.response
+
 		def _send(self, command, token = None, on_response = None, sync = False):
 			if token is None:
 				token = self.next_token
@@ -133,17 +156,19 @@ class GdbSession(object):
 				if not sync:
 					self.session._response_handlers[str(token)] = on_response
 				else:
-					def on_response_sync(*args, **kwargs):
-						on_response_sync.response = on_response(*args, **kwargs)
-						on_response_sync.got_response = True
-					on_response_sync.response = None
-					on_response_sync.got_response = False
+					#def on_response_sync(*args, **kwargs):
+					#	on_response_sync.response = on_response(*args, **kwargs)
+					#	on_response_sync.got_response = True
+					#	return on_response_sync.response
+					#on_response_sync.response = None
+					#on_response_sync.got_response = False
+					on_response_sync = self.SyncCallback(on_response)
 					self.session._response_handlers[str(token)] = on_response_sync
-						
+					
 			# MUST come last
 			GdbController._send(self, command, token=token)
 			if sync:
-				TIMEOUT = 1.
+				TIMEOUT = 10.
 				t0 = time.time()
 				while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
 					time.sleep(0.01)
@@ -203,10 +228,10 @@ class GdbSession(object):
 				self.log.debug("TOKEN FOUND: %s" % repr(token))
 				handler = self._response_handlers[token]
 				def thread_func():
-					more = handler(results)
-					if not more:
-						self._response_handlers.pop(token)
-				handler_thread = threading.Thread(target = thread_func, args = [])
+					handler(results)
+					self._response_handlers.pop(token)
+					self.onProcessed.broadcast()
+				handler_thread = SafeThread(target = thread_func, args = [])
 				handler_thread.setDaemon(True)
 				handler_thread.start()
 			else:
@@ -220,7 +245,7 @@ class GdbSession(object):
 			if hasattr(results, 'frame'):
 				self._update_frame(results.frame)
 			
-			self.onProcessed.broadcast()
+			#self.onProcessed.broadcast()
 			
 			if resultClass == 'stopped':
 				self.var_update()
