@@ -82,6 +82,12 @@ class AbstractVar(object):
 	def onUpdate(self, var, upd):
 		pass
 
+	def __str__(self):
+		return "(%s) %s: %s" % (type(self).__name__, self.expr, self.value)
+
+	def __repr__(self):
+		return self.__str__()
+
 class FilteredWatch(AbstractVar):
 	@classmethod
 	def _wrap(cls, sess, var):
