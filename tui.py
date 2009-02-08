@@ -426,12 +426,16 @@ if __name__ == '__main__':
 	sessionlog_path = "session.log"
 	
 	log = logging.getLogger("gdb")
-	log.addHandler(logging.FileHandler(sessionlog_path))
+	log_handler = logging.FileHandler(sessionlog_path)
+	log_handler.setFormatter(logging.Formatter('%(created)f\t%(message)s'))
+	log.addHandler(log_handler)
 	log.setLevel(logging.DEBUG)
 
 	gdbout_path = "gdbout.log"
 	gdblog = logging.getLogger("gdbout")
-	gdblog.addHandler(logging.FileHandler(gdbout_path))
+	gdblog_handler = logging.FileHandler(gdbout_path)
+	gdblog_handler.setFormatter(logging.Formatter('%(created)f\t%(message)s'))
+	gdblog.addHandler(gdblog_handler)
 	gdblog2session = logging.FileHandler(sessionlog_path)
 	gdblog2session.setFormatter(logging.Formatter('GDB OUT> %(message)s'))
 	gdblog.addHandler(gdblog2session)
@@ -439,7 +443,9 @@ if __name__ == '__main__':
 
 	gdbin_path = "gdbin.log"
 	gdbinlog = logging.getLogger("gdbin")
-	gdbinlog.addHandler(logging.FileHandler(gdbin_path))
+	gdbinlog_handler = logging.FileHandler(gdbin_path)
+	gdbinlog_handler.setFormatter(logging.Formatter('%(created)f\t%(message)s'))
+	gdbinlog.addHandler(gdbinlog_handler)
 	gdbinlog2session = logging.FileHandler(sessionlog_path)
 	gdbinlog2session.setFormatter(logging.Formatter('SENDING CMD> %(message)s'))
 	gdbinlog.addHandler(gdbinlog2session)
