@@ -1,4 +1,5 @@
 import pygdb
+
 """
 Common interface for watchable variables:
 
@@ -23,18 +24,23 @@ class AbstractVar(object):
 	numchild = property(lambda self: self._numchild())
 	in_scope = property(lambda self: self._in_scope())
 	path_expr = property(lambda self: self._path_expr())
-	
+	_children_computing = False
 
 	def __init__(self, gdbsess, var):
 		self.gdbsess = gdbsess
 		self.var = var
 	
 	def _children(self):
+		if self._children_computing:
+			return {}
+		
 		if self.var.numchild == 0:
 			return {}
 		
 		if self.var.children is None:
+			self._children_computing = True
 			self.gdbsess.var_list_children(self.var.name, sync = True)
+			self._children_computing = False
 		
 		if self.var.children is None: # still
 			raise Exception, "Var get children failed."
