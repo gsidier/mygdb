@@ -148,11 +148,11 @@ class KeyboardController(Controller):
 	"""
 	
 	def __init__(self, win):
+		self.win = win
 		self._process = True
 		self.kb_poll_thread = threading.Thread(target = self._poll)
 		self.kb_poll_thread.setDaemon(True)
 		self.kb_poll_thread.start()
-		self.win = win
 
 	def _poll(self):
 		log = logging.getLogger("gdb") # DELME
