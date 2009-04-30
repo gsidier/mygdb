@@ -1,5 +1,3 @@
-import pygdb
-
 """
 Common interface for watchable variables:
 
