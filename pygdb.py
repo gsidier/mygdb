@@ -181,7 +181,7 @@ class GdbSession(object):
 		self.log = logging.getLogger("gdb")
 		self.controller = self.MyGdbController(self)
 		
-		self._file = None
+		self._frame = None
 
 		self._response_handlers = {}
 		
@@ -258,6 +258,7 @@ class GdbSession(object):
 
 	def _update_frame(self, frame):
 		self.onFrameChange.broadcast(frame)
+		self._frame = frame
 
 	def get_watched_var(self, path):
 		return self._vars.get(path, None)
@@ -321,7 +322,11 @@ class GdbSession(object):
 			'gdb': self.controller, 
 			'att': self.attach,
 			'b': self.setbreak,
-			'f': self.file, 
+			'f': self.file,
+			'r': self.run,
+			'c': self.cont,
+			'n': self.next,
+			's': self.stepi,
 			'w': self.add_watch, # self.var_create, 
 			'log': lambda str: self.log.debug(str) 
 		})
