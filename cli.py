@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 import pygdb
 from pygdb import GdbMI, GdbSession
 
