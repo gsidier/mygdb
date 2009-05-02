@@ -41,7 +41,7 @@ class GdbController(GdbCommandBuilder):
 	def __init__(self, gdb_instance, output_handler):
 		self.gdb = gdb_instance
 		self.output_handler = output_handler
-	
+		
 		self.log = logging.getLogger("gdb") # log everything
 		self.gdblog = logging.getLogger("gdbout") # log what comes out of gdb
 		self.gdbinlog = logging.getLogger("gdbin") # log what goes into gdb
@@ -65,7 +65,9 @@ class GdbController(GdbCommandBuilder):
 		self.gdb_error_thread = threading.Thread(target = self._gdb_error_thread, args = [self.gdb.gdberr])
 		self.gdb_error_thread.setDaemon(True)
 		self.gdb_error_thread.start()
-
+		
+		self.COMMANDS = self.commands()
+		
 	def raw_send(self, command):
 		self.gdb.gdbin.write(command.strip())
 		self.gdb.gdbin.write("\n")
@@ -316,8 +318,8 @@ class GdbSession(object):
 
 	# ========== SCRIPTING INTERFACE ==========
 	#
-	def runCommand(self, cmd):
-		eval(cmd, {
+	def commands(self):
+		return {
 			'app': self, 
 			'gdb': self.controller, 
 			'att': self.attach,
@@ -329,7 +331,9 @@ class GdbSession(object):
 			's': self.stepi,
 			'w': self.add_watch, # self.var_create, 
 			'log': lambda str: self.log.debug(str) 
-		})
+		}
+	def runCommand(self, cmd):
+		eval(cmd, self.COMMANDS)
 		self.onProcessed.broadcast()
 	#
 	def runQuickCommand(self, cmd):
