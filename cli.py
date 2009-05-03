@@ -1,22 +1,71 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
 import pygdb
 from pygdb import GdbMI, GdbSession
 
 import logging
 
-def interpreter(gdbsess):
-	while True:
-		try:
-			cmd = raw_input("mygdb ?> ")
-		except EOFError:
-			break
-		except KeyboardInterrupt:
-			print "Use EOF (CONTROL-D) to quit command mode"
-			cmd = None
-		if (cmd):
+class CLI(object):
+	
+	NLINES_BEFORE = 3
+	NLINES_AFTER = 3
+	
+	def __init__(self, gdbsess):
+		self.gdbsess = gdbsess
+		
+		self.COMMANDS = self.commands()
+		
+		self._src_lines = []
+		
+		self.gdbsess.onFrameChange.subscribe(self.onFrameChange)
+		
+	def commands(self):
+		cmds = {}
+		cmds.update(self.gdbsess.commands())
+		cmds.update({
+			'l': self.list,
+			'disp': self.disp
+		})
+	
+	def list(self):
+		line = self.gdbsess.src_line or 1
+		first = max(1, line - self.NLINES_BEFORE)
+		last = min(len(self._src_lines), line + self.NLINES_AFTER)
+		ndigits = len(str(last))
+		format = "%" + str(ndigits) + "d  %s"
+		print
+		for i in xrange(first, last + 1):
+			print format % (i, self._src_lines[i])
+	
+	def disp(self):
+		pass
+	
+	def interpreter(self):
+		while True:
 			try:
-				gdbsess.runQuickCommand(cmd)
-			except Exception, e:
-				print "Error: ", e.message
+				cmd = raw_input("mygdb ?> ")
+			except EOFError:
+				break
+			except KeyboardInterrupt:
+				print "Use EOF (CONTROL-D) to quit command mode"
+				cmd = None
+			if (cmd):
+				try:
+					self.gdbsess.runQuickCommand(cmd)
+				except Exception, e:
+					print "Error: ", e.message
+	# Event Handlers
+	def onFrameChange(self, frame):
+		if self.gdbsess.src_path is not None:
+			f = file(self.gdbsess.src_path, 'r')
+			self._src_lines = f.readlines()
+			f.close()
+		self.list()
+
+class Interpreter(object):
+	
+	def __init__(self, gdbsess):
+		self.gdbsess = gdbsess	
 
 if __name__ == '__main__':
 	
@@ -66,9 +115,11 @@ if __name__ == '__main__':
 	def echo(msg):
 		print msg
 	S.onError.subscribe(lambda tok, msg: echo( "ERR: %s" % msg))
-
+	
+	cli = CLI(S)
+	
 	def quick():
-		interpreter(S)
+		cli.interpreter()
 	
 	try:
 		import IPython
@@ -76,5 +127,6 @@ if __name__ == '__main__':
 	except:
 		print "note: couldn't set magic quick input function"
 		q = quick()
-
+	
+	quick()
 
