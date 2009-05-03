@@ -130,7 +130,15 @@ class WatchedVar(object):
 		return self.__repr__()
 
 class GdbSession(object):
-
+	"""
+	The aim of this class is to provide a high-level interface to a gdb session.
+	State info such as current source location, etc. is maintained.
+	
+	A list of watched variables is also maintained.
+	
+	Slots are provided for various events.
+	"""
+	
 	class MyGdbController(GdbController):
 		def __init__(self, session):
 			self.session = session
@@ -175,6 +183,10 @@ class GdbSession(object):
 					if time.time() - t0 > TIMEOUT:
 						raise Exception, "Timeout : request %s" % token
 				return on_response_sync.response
+	_src_path = None
+	src_path = property(lambda self: self._src_path)
+	_src_line = None
+	src_line = property(lambda self: self._src_line)
 	
 	def __init__(self, gdbinst):
 		self.gdb = gdbinst
@@ -189,6 +201,8 @@ class GdbSession(object):
 		self._vars = {} # name -> var
 		self._watchers = defaultdict(lambda: {})
 		self._watcher_slots = defaultdict(lambda: EventSlot())
+		
+		self.COMMANDS = self.commands()
 		
 		# State data
 		self.threadid = None
@@ -255,11 +269,19 @@ class GdbSession(object):
 		if threadid != self.threadid:
 			self.threadid = threadid
 			self.onThreadSwitch.broadcast(self.threadid)
-
+	
 	def _update_frame(self, frame):
-		self.onFrameChange.broadcast(frame)
 		self._frame = frame
-
+		if hasattr(frame, 'fullname'):
+			self._src_path = frame.fullname
+		elif hasattr(frame, 'file'):
+			self._src_path = os.path.abspath( frame.file ) # TODO : replace with normpath(join(<gdb's cwd>, path))
+		if hasattr(frame, 'line'):
+			self._src_line = int(frame.line)
+		else:
+			self._src_line = None
+		self.onFrameChange.broadcast(frame)
+	
 	def get_watched_var(self, path):
 		return self._vars.get(path, None)
 
@@ -316,8 +338,8 @@ class GdbSession(object):
 
 	# ========== SCRIPTING INTERFACE ==========
 	#
-	def runCommand(self, cmd):
-		eval(cmd, {
+	def commands(self): 
+		return {
 			'app': self, 
 			'gdb': self.controller, 
 			'att': self.attach,
@@ -329,7 +351,10 @@ class GdbSession(object):
 			's': self.stepi,
 			'w': self.add_watch, # self.var_create, 
 			'log': lambda str: self.log.debug(str) 
-		})
+		}
+	#
+	def runCommand(self, cmd):
+		eval(cmd, self.COMMANDS)
 		self.onProcessed.broadcast()
 	#
 	def runQuickCommand(self, cmd):
