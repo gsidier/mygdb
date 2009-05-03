@@ -41,7 +41,7 @@ class GdbController(GdbCommandBuilder):
 	def __init__(self, gdb_instance, output_handler):
 		self.gdb = gdb_instance
 		self.output_handler = output_handler
-	
+		
 		self.log = logging.getLogger("gdb") # log everything
 		self.gdblog = logging.getLogger("gdbout") # log what comes out of gdb
 		self.gdbinlog = logging.getLogger("gdbin") # log what goes into gdb
