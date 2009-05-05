@@ -11,6 +11,10 @@ class CLI(object):
 	NLINES_BEFORE = 3
 	NLINES_AFTER = 3
 	
+	LINE_STATUS_NCHARS = 1
+	LINE_STATUS_POS_CURR = 0
+	LINE_STATUS_CHAR_CURR = '>'
+	
 	def __init__(self, gdbsess):
 		self.gdbsess = gdbsess
 		
@@ -35,11 +39,16 @@ class CLI(object):
 		first = max(1, line - self.NLINES_BEFORE)
 		last = min(len(self._src_lines), line + self.NLINES_AFTER)
 		ndigits = len(str(last))
-		format = "%" + str(ndigits) + "d  %s"
+		format = "%s %" + str(ndigits) + "d  %s"
 		def printit():
 			print
 			for i in xrange(first, last + 1):
-				print format % (i, self._src_lines[i])
+				line = self._src_lines[i - 1]
+				line_status = [' '] * self.LINE_STATUS_NCHARS
+				if i == self.gdbsess.src_line:
+					line_status[self.LINE_STATUS_POS_CURR] = self.LINE_STATUS_CHAR_CURR
+				line_status = ''.join(line_status)
+				print format % (line_status, i, line[:-1])
 		self._sync(printit)
 	
 	def disp(self):
