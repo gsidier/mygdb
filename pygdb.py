@@ -8,6 +8,7 @@ import collections
 import logging
 from collections import defaultdict
 import traceback
+from select import select
 
 import recparse
 import gdbmi_output_parser
@@ -16,7 +17,7 @@ from event import EventSlot, EventQueue
 from watch import FilteredWatch
 
 class GdbMI(object):
-	def __init__(self):	
+	def __init__(self):
 		master, slave = pty.openpty()
 		self.targetio = os.fdopen(master, 'rw')
 		tty = os.ttyname(slave)
@@ -47,17 +48,17 @@ class GdbController(GdbCommandBuilder):
 		self.gdbinlog = logging.getLogger("gdbin") # log what goes into gdb
 		self.gdberrlog = logging.getLogger("gdberr") # log gdb errors
 		self.targetlog = logging.getLogger("targetout") # log target output
-	
+		
 		self.output_hist = []
 		self.target_hist = []
-	
+		
 		self.target_output_thread = threading.Thread(target = self._target_output_thread, args = [self.gdb.targetio])
 		self.target_output_thread.setDaemon(True)
 		self.target_output_thread.start()
-
+		
 		self.gdbmi_output_lexer = gdbmi_output_parser.lex
 		self.gdbmi_output_parser = gdbmi_output_parser.gdbmi_output(self.output_handler)
-	
+		
 		self.gdb_output_thread = threading.Thread(target = self._gdb_raw_output_thread, args = [self.gdb.gdbout])
 		self.gdb_output_thread.setDaemon(True)
 		self.gdb_output_thread.start()
@@ -75,7 +76,7 @@ class GdbController(GdbCommandBuilder):
 		self.gdbinlog.debug(cmdline)
 		self.gdb.gdbin.write(cmdline)
 		self.gdb.gdbin.write("\n")
-
+	
 	def _gdb_raw_output_thread(self, stream):
 		while True:
 			line = stream.readline()
@@ -164,12 +165,6 @@ class GdbSession(object):
 				if not sync:
 					self.session._response_handlers[str(token)] = on_response
 				else:
-					#def on_response_sync(*args, **kwargs):
-					#	on_response_sync.response = on_response(*args, **kwargs)
-					#	on_response_sync.got_response = True
-					#	return on_response_sync.response
-					#on_response_sync.response = None
-					#on_response_sync.got_response = False
 					on_response_sync = self.SyncCallback(on_response)
 					self.session._response_handlers[str(token)] = on_response_sync
 					
@@ -183,10 +178,13 @@ class GdbSession(object):
 					if time.time() - t0 > TIMEOUT:
 						raise Exception, "Timeout : request %s" % token
 				return on_response_sync.response
+	
 	_src_path = None
 	src_path = property(lambda self: self._src_path)
 	_src_line = None
 	src_line = property(lambda self: self._src_line)
+	_accept_input = True
+	accept_input = property(lambda self: self._accept_input)
 	
 	def __init__(self, gdbinst):
 		self.gdb = gdbinst
@@ -316,15 +314,22 @@ class GdbSession(object):
 	# ========== GDB OUTPUT VISITOR ==========
 	#
 	def onExecAsyncOutput(self, token, asyncClass, results=None):
+		self._update_async_status(asyncClass)
 		self._handle_results(token, asyncClass, results)
 	#
 	def onNotifyAsyncOutput(self, token, asyncClass, results=None):
+		self._update_async_status(asyncClass)
 		self._handle_results(token, asyncClass, results)
 	#
 	def onStatusAsyncOutput(self, token, asyncClass, results=None):
+		self._update_async_status(asyncClass)
 		self._handle_results(token, asyncClass, results)
 	#
 	def onResultRecord(self, token, resultClass, results=None):
+		if resultClass in ('done', 'connected', 'error', 'exit'):
+			self._accept_input = True
+		elif resultClass in ('running',):
+			self._accept_input = False
 		self._handle_results(token, resultClass, results)
 	#
 	def onGdbOutput(self, string):
@@ -335,7 +340,13 @@ class GdbSession(object):
 	#
 	def onTargetOutput(self, string):
 		self.log.debug(">>> TARGET OUTPUT >>> %s" % string)
-
+	
+	def _update_async_status(self, asyncClass):
+		if asyncClass in ('stopped',):
+			self._accept_input = True
+		elif asyncClass in ('running',):
+			self._accept_input = True
+	
 	# ========== SCRIPTING INTERFACE ==========
 	#
 	def commands(self): 
