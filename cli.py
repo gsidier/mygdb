@@ -20,6 +20,10 @@ class CLI(object):
 	LINE_STYLE = "${NORMAL}"
 	CURR_LINE_STYLE = "${BOLD}${YELLOW}"
 	
+	GDB_OUT_STYLE = "${CYAN}"
+	GDB_ERR_STYLE = "${RED}"
+	TARGET_OUT_STYLE = "${GREEN}"
+	
 	def __init__(self, gdbsess):
 		self.gdbsess = gdbsess
 		
@@ -32,6 +36,9 @@ class CLI(object):
 		self._src_lines = []
 		
 		self.gdbsess.onFrameChange.subscribe(self.onFrameChange)
+		self.gdbsess.eventGdbOutput.subscribe(self.onGdbOutput)
+		self.gdbsess.eventGdbError.subscribe(self.onGdbErr)
+		self.gdbsess.eventTargetOutput.subscribe(self.onTargetOutput)
 		
 	def commands(self):
 		cmds = {}
@@ -103,6 +110,19 @@ class CLI(object):
 			self._src_lines = f.readlines()
 			f.close()
 		self.list()
+	def onGdbOutput(self, string):
+		def printGdbOutput():
+			print self._term.render("%s%s${NORMAL}" % (self.GDB_OUT_STYLE, string[:-1]))
+		self._sync(printGdbOutput)
+	def onGdbErr(self, string):
+		def printGdbErr():
+			print self._term.render("%s%s${NORMAL}" % (self.GDB_ERR_STYLE, string[:-1]))
+		self._sync(printGdbErr)
+	def onTargetOutput(self, string):
+		def printTargetOutput():
+			print self._term.render("%s%s${NORMAL}" % (self.TARGET_OUT_STYLE, string[:-1]))
+		self._sync(printTargetOutput)
+
 
 class Interpreter(object):
 	
