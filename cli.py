@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 import pygdb
 from pygdb import GdbMI, GdbSession
+from term import TerminalController
 
 import logging
 from collections import deque
@@ -16,8 +17,13 @@ class CLI(object):
 	LINE_STATUS_POS_CURR = 0
 	LINE_STATUS_CHAR_CURR = '>'
 	
+	LINE_STYLE = "${NORMAL}"
+	CURR_LINE_STYLE = "${BOLD}${YELLOW}"
+	
 	def __init__(self, gdbsess):
 		self.gdbsess = gdbsess
+		
+		self._term = TerminalController()
 		
 		self.COMMANDS = self.commands()
 		
@@ -40,7 +46,7 @@ class CLI(object):
 		first = max(1, line - self.NLINES_BEFORE)
 		last = min(len(self._src_lines), line + self.NLINES_AFTER)
 		ndigits = len(str(last))
-		format = "%s %" + str(ndigits) + "d  %s"
+		format = "%(status)s %(lineno)" + str(ndigits) + "d  %(style)s%(line)s${NORMAL}"
 		def printit():
 			print
 			for i in xrange(first, last + 1):
@@ -48,8 +54,16 @@ class CLI(object):
 				line_status = [' '] * self.LINE_STATUS_NCHARS
 				if i == self.gdbsess.src_line:
 					line_status[self.LINE_STATUS_POS_CURR] = self.LINE_STATUS_CHAR_CURR
+					style = self.CURR_LINE_STYLE
+				else:
+					style = self.LINE_STYLE
 				line_status = ''.join(line_status)
-				print format % (line_status, i, line[:-1])
+				print self._term.render(format % {
+					'status': line_status, 
+					'lineno': i, 
+					'style': style,
+					'line': line[:-1]
+				})
 		self._sync(printit)
 	
 	def disp(self):
