@@ -4,6 +4,7 @@ import pygdb
 from pygdb import GdbMI, GdbSession
 
 import logging
+from collections import deque
 
 class CLI(object):
 	
@@ -14,6 +15,8 @@ class CLI(object):
 		self.gdbsess = gdbsess
 		
 		self.COMMANDS = self.commands()
+		
+		self._sync_q = deque()
 		
 		self._src_lines = []
 		
@@ -33,27 +36,40 @@ class CLI(object):
 		last = min(len(self._src_lines), line + self.NLINES_AFTER)
 		ndigits = len(str(last))
 		format = "%" + str(ndigits) + "d  %s"
-		print
-		for i in xrange(first, last + 1):
-			print format % (i, self._src_lines[i])
+		def printit():
+			print
+			for i in xrange(first, last + 1):
+				print format % (i, self._src_lines[i])
+		self._sync(printit)
 	
 	def disp(self):
 		pass
 	
 	def interpreter(self):
 		while True:
-			try:
-				cmd = raw_input("mygdb ?> ")
-			except EOFError:
-				break
-			except KeyboardInterrupt:
-				print "Use EOF (CONTROL-D) to quit command mode"
-				cmd = None
-			if (cmd):
+			idle = True
+			while len(self._sync_q) > 0:
+				action = self._sync_q.popleft()
+				action()
+				idle = False
+			if self.gdbsess.accept_input:
+				idle = False
 				try:
-					self.gdbsess.runQuickCommand(cmd)
-				except Exception, e:
-					print "Error: ", e.message
+					cmd = raw_input("mygdb ?> ")
+				except EOFError:
+					break
+				except KeyboardInterrupt:
+					print "Use EOF (CONTROL-D) to quit command mode"
+					cmd = None
+				if (cmd):
+					try:
+						self.gdbsess.runQuickCommand(cmd)
+					except Exception, e:
+						print "Error: ", e.message
+	
+	def _sync(self, action):
+		self._sync_q.append(action)
+	
 	# Event Handlers
 	def onFrameChange(self, frame):
 		if self.gdbsess.src_path is not None:
