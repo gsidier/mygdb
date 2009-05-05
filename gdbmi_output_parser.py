@@ -67,7 +67,7 @@ result_rec  = lambda V: (Optional(lex.TOKEN) + lex.HAT + result_class + optional
 stream_rec  = lambda V: (gdbout(V) | targetout(V) | gdberr(V))
 async_rec   = lambda V: (exec_msg(V) | notify_msg(V) | status_msg(V))
 
-gdbmi_output = lambda V: (async_rec(V) | stream_rec(V) | result_rec(V) | lex.STOP) + lex.EOL
+gdbmi_output = lambda V: (async_rec(V) | stream_rec(V) | result_rec(V) | lex.STOP) + lex.EOL    >= (lambda tok, val: (val[0]))
 
 if __name__ == '__main__':
 
