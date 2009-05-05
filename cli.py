@@ -5,6 +5,7 @@ from pygdb import GdbMI, GdbSession
 
 import logging
 from collections import deque
+from time import sleep
 
 class CLI(object):
 	
@@ -75,6 +76,8 @@ class CLI(object):
 						self.gdbsess.runQuickCommand(cmd)
 					except Exception, e:
 						print "Error: ", e.message
+			if idle:
+				sleep(0.001)
 	
 	def _sync(self, action):
 		self._sync_q.append(action)
