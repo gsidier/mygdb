@@ -77,6 +77,7 @@ class CLI(object):
 		pass
 	
 	def interpreter(self):
+		last_cmd = None
 		while True:
 			idle = True
 			while len(self._sync_q) > 0:
@@ -85,6 +86,7 @@ class CLI(object):
 				idle = False
 			if self.gdbsess.accept_input:
 				idle = False
+				cmd = None
 				try:
 					cmd = raw_input("mygdb ?> ")
 				except EOFError:
@@ -92,9 +94,12 @@ class CLI(object):
 				except KeyboardInterrupt:
 					print "Use EOF (CONTROL-D) to quit command mode"
 					cmd = None
-				if (cmd):
+				if cmd == '':
+					cmd = last_cmd
+				if cmd:
 					try:
 						self.gdbsess.runQuickCommand(cmd)
+						last_cmd = cmd
 					except Exception, e:
 						print "Error: ", e.message
 			if idle:
