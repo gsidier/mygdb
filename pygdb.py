@@ -213,6 +213,9 @@ class GdbSession(object):
 		self.onFrameChange = EventSlot() # frameinfo
 		self.onProcessed = EventSlot() # <no args>
 		self.onWatchUpdate = EventSlot() # var
+		self.eventGdbOutput = EventSlot() # msg
+		self.eventGdbError = EventSlot() # msg
+		self.eventTargetOutput = EventSlot() # msg
 
 	def err_check_response(self, on_response):
 		def on_response_or_err(response):
@@ -343,12 +346,15 @@ class GdbSession(object):
 	#
 	def onGdbOutput(self, string):
 		self.log.debug(">>> GDB OUTPUT >>> %s " % string)
+		self.eventGdbOutput.broadcast(string)
 	#
 	def onGdbErr(self, string):
 		self.log.debug(">>> GDB ERR >>> %s" % string)
+		self.eventGdbErr.broadcast(string)
 	#
 	def onTargetOutput(self, string):
 		self.log.debug(">>> TARGET OUTPUT >>> %s" % string)
+		self.eventTargetOutput.broadcast(string)
 	
 	def _update_async_status(self, asyncClass):
 		if asyncClass in ('stopped',):
