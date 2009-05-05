@@ -88,7 +88,7 @@ class CLI(object):
 				idle = False
 				cmd = None
 				try:
-					cmd = raw_input("mygdb ?> ")
+					cmd = raw_input("mygdb ?> ").strip()
 				except EOFError:
 					break
 				except KeyboardInterrupt:
