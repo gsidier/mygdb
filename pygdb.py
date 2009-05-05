@@ -314,23 +314,32 @@ class GdbSession(object):
 	# ========== GDB OUTPUT VISITOR ==========
 	#
 	def onExecAsyncOutput(self, token, asyncClass, results=None):
-		self._update_async_status(asyncClass)
-		self._handle_results(token, asyncClass, results)
+		try:
+			self._handle_results(token, asyncClass, results)
+		finally:
+			self._update_async_status(asyncClass)
 	#
 	def onNotifyAsyncOutput(self, token, asyncClass, results=None):
-		self._update_async_status(asyncClass)
-		self._handle_results(token, asyncClass, results)
+		try:
+			self._handle_results(token, asyncClass, results)
+		finally:
+			self._update_async_status(asyncClass)
 	#
 	def onStatusAsyncOutput(self, token, asyncClass, results=None):
-		self._update_async_status(asyncClass)
-		self._handle_results(token, asyncClass, results)
+		try:
+			self._handle_results(token, asyncClass, results)
+		finally:
+			self._update_async_status(asyncClass)
 	#
 	def onResultRecord(self, token, resultClass, results=None):
-		if resultClass in ('done', 'connected', 'error', 'exit'):
-			self._accept_input = True
-		elif resultClass in ('running',):
-			self._accept_input = False
-		self._handle_results(token, resultClass, results)
+		try:
+			self._handle_results(token, resultClass, results)
+		finally:
+			if resultClass in ('done', 'connected', 'error', 'exit'):
+				self._accept_input = True
+			elif resultClass in ('running',):
+				self._accept_input = False
+
 	#
 	def onGdbOutput(self, string):
 		self.log.debug(">>> GDB OUTPUT >>> %s " % string)
