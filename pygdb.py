@@ -167,7 +167,7 @@ class GdbSession(object):
 				else:
 					on_response_sync = self.SyncCallback(on_response)
 					self.session._response_handlers[str(token)] = on_response_sync
-					
+			self.session._accept_input = False
 			# MUST come last
 			GdbController._send(self, command, token=token)
 			if sync:
