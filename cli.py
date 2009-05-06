@@ -3,6 +3,7 @@
 import pygdb
 from pygdb import GdbMI, GdbSession
 from term import TerminalController
+from pywatch import PyWatch
 
 import logging
 from collections import deque
@@ -40,13 +41,20 @@ class CLI(object):
 		self.gdbsess.eventGdbErr.subscribe(self.onGdbErr)
 		self.gdbsess.eventTargetOutput.subscribe(self.onTargetOutput)
 		
+		commands = {}
+		commands.update(self.gdbsess.commands())
+		commands.update(self.commands())
+		self.interpreter = Interpreter(commands)
+		
 	def commands(self):
 		cmds = {}
 		cmds.update(self.gdbsess.commands())
 		cmds.update({
 			'l': self.list,
-			'disp': self.disp
+			'disp': self.disp,
+			'p': self.py_print_expr,
 		})
+		return cmds
 	
 	def list(self):
 		line = self.gdbsess.src_line or 1
@@ -76,7 +84,13 @@ class CLI(object):
 	def disp(self):
 		pass
 	
-	def interpreter(self):
+	def py_print_expr(self, expr):
+		var = self.gdbsess.var_create(expr, sync = True)
+		watch = PyWatch._wrap(self.gdbsess, var)
+		# self.add_var_watcher(var, watch)
+		print watch.pyval
+	
+	def interpreter_loop(self):
 		last_cmd = None
 		while True:
 			idle = True
@@ -98,7 +112,7 @@ class CLI(object):
 					cmd = last_cmd
 				if cmd:
 					try:
-						self.gdbsess.runQuickCommand(cmd)
+						self.interpreter.eval(cmd)
 						last_cmd = cmd
 					except Exception, e:
 						print "Error: ", e.message
@@ -131,8 +145,17 @@ class CLI(object):
 
 class Interpreter(object):
 	
-	def __init__(self, gdbsess):
-		self.gdbsess = gdbsess	
+	def __init__(self, commands):
+		self.commands = commands
+
+	def eval(self, cmd):
+		items = cmd.split()
+		if items == []:
+			raise Exception("Syntax error: Empty command")
+		func = items[0]
+		args = items[1:]
+		pycmd = "%s(%s)" % (func, ', '.join(repr(arg) for arg in args) )
+		eval(pycmd, self.commands)
 
 if __name__ == '__main__':
 	
@@ -186,7 +209,7 @@ if __name__ == '__main__':
 	cli = CLI(S)
 	
 	def quick():
-		cli.interpreter()
+		cli.interpreter_loop()
 	
 	try:
 		import IPython
