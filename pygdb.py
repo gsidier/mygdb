@@ -39,9 +39,10 @@ class SafeThread(threading.Thread):
 		threading.Thread.__init__(self, **kwargs)
 
 class GdbController(GdbCommandBuilder):
-	def __init__(self, gdb_instance, output_handler):
+	def __init__(self, gdb_instance, output_handler, target_output_handler):
 		self.gdb = gdb_instance
 		self.output_handler = output_handler
+		self.target_output_handler = target_output_handler
 		
 		self.log = logging.getLogger("gdb") # log everything
 		self.gdblog = logging.getLogger("gdbout") # log what comes out of gdb
@@ -112,6 +113,7 @@ class GdbController(GdbCommandBuilder):
 			#self.log.debug("TARGET says: %s" % line)
 			self.targetlog.debug(line)
 			self.target_hist.append(line)
+			self.target_output_handler(line)
 		self.log.debug("(TARGET stdout : closes)")
 
 class WatchedVar(object):
@@ -145,7 +147,7 @@ class GdbSession(object):
 			self.session = session
 			self.next_token = 1000001
 			# MUST come last
-			GdbController.__init__(self, session.gdb, session)
+			GdbController.__init__(self, session.gdb, session, session.onTargetOutput)
 
 		class SyncCallback(object):
 			def __init__(self, callback):
