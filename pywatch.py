@@ -11,6 +11,8 @@ class PyWatch(AbstractVar):
 				return StdStringWatch(sess, var)
 			elif var.type.startswith('std::vector<') and var.type[-1] == '>':
 				return StdVectorWatch(sess, var)
+			elif var.type == 'char *':
+				return CharPtrWatch(sess, var)
 		return PyWatch(sess, var)
 	
 	def _pyval(self):
@@ -51,5 +53,19 @@ class StdStringWatch(PyWatch):
 		s = self.chars.value
 		beg = s.find('"')
 		end = s.rfind('"')
-		return s[ beg:end+1 ]
+		return s[ beg+1:end ]
+
+class CharPtrWatch(PyWatch):
+	def __init__(self, gdbsess, var):
+		PyWatch.__init__(self, gdbsess, var)
+	def _numchild(self):
+		return 0
+	def _children(self):
+		return {}
+	
+	def _pyval(self):
+		s = self.value
+		beg = s.find('"')
+		end = s.rfind('"')
+		return s[ beg+1:end ]
 
