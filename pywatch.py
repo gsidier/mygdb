@@ -13,10 +13,18 @@ class PyWatch(AbstractVar):
 				return StdVectorWatch(sess, var)
 			elif var.type == 'char *':
 				return CharPtrWatch(sess, var)
+			elif var.type == 'int':
+				return IntWatch(sess, var)
 		return PyWatch(sess, var)
 	
 	def _pyval(self):
 		return self.value
+
+class IntWatch(PyWatch):
+	def __init__(self, gdbsess, var):
+		PyWatch.__init__(self, gdbsess, var)
+	def _pyval(self):
+		return int(self.value)
 
 class StdVectorWatch(PyWatch):
 	def __init__(self, gdbsess, var):
@@ -68,4 +76,28 @@ class CharPtrWatch(PyWatch):
 		beg = s.find('"')
 		end = s.rfind('"')
 		return s[ beg+1:end ]
+
+class StdMapWatch(PyWatch):
+	def __init__(self, gdbsess, var):
+		PyWatch.__init__(self, gdbsess, var)
+		self.root = self.register_watch(
+			"(%s)._M_t._M_impl._M_header",
+			(self.var,))
+	
+	def _pyval(self):
+		res = {}
+		curr = self.root
+		
+		def rec(curr):
+			ptr_p = self.register_watch(
+				"(%s)._M_parent",
+				(curr,))
+			ptr_r = self.register_watch(
+				"(%s)._M_right",
+				(curr,))
+			ptr_l = self.register_watch(
+				"(%s)._M_left", 
+				(curr,))
+			if ptr_r.value != ptr.p.value:
+				pass
 
