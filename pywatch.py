@@ -15,10 +15,35 @@ class PyWatch(AbstractVar):
 				return CharPtrWatch(sess, var)
 			elif var.type == 'int':
 				return IntWatch(sess, var)
+			elif var.type[-1] == '*':
+				return PtrWatch(sess, var)
+
 		return PyWatch(sess, var)
 	
 	def _pyval(self):
 		return self.value
+	
+	def eval(self, expr, subs = ()):
+		var = self.register_watch(expr, subs)
+		return var.value
+
+class PtrWatch(object):
+	def __init__(self, gdbsess, var):
+		PyWatch.__init__(self, gdbsess, var)
+	def _pyval(self):
+		s = self.value
+		addr = int(s[s.rfind('x')+1:], 16)
+		type = s[s.find('(')+1:s.rfind(')')]
+		return CPtr(addr, type)
+
+class CPtr(object):
+	def __init__(self, addr, type):
+		self.addr = addr
+		self.type = type
+	def __str__(self):
+		return "(%s) %s" % (self.type, hex(self.addr))
+	def __repr__(self):
+		return "CPointer(%s, %d)" % (repr(self.type), repr(addr))
 
 class IntWatch(PyWatch):
 	def __init__(self, gdbsess, var):
@@ -86,18 +111,22 @@ class StdMapWatch(PyWatch):
 	
 	def _pyval(self):
 		res = {}
-		curr = self.root
+		curr = self.register_watch("&(%s)", (self.root,))
 		
 		def rec(curr):
 			ptr_p = self.register_watch(
 				"(%s)._M_parent",
 				(curr,))
+			if ptr_p.value.addr != 0: # data node
+				casted = self.register_watch(
+					"('std::_Rb_tree_node<std::pair<%s, %s> >' *)(%s)" % 
+			
 			ptr_r = self.register_watch(
 				"(%s)._M_right",
 				(curr,))
 			ptr_l = self.register_watch(
 				"(%s)._M_left", 
 				(curr,))
-			if ptr_r.value != ptr.p.value:
-				pass
+			if ptr_r.value.addr != curr.value.addr:
+				rec
 
