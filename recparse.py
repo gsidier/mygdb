@@ -278,23 +278,29 @@ class Literal(Seq):
 			result.value = ''.join(result.value)
 		return success, result	
 
+def ascrange(start, end):
+	return ''.join([ chr(i) for i in range(ord(start), ord(end)+1) ])
+
 def Word(string):
 	return (CharacterClass(string) * (1,)).set_result(lambda tok,res: ''.join(res))
 
 class Lexer(object):
 
 	def __init__(self, **tokens):
-		self.tokens = tokens
 		def token_matcher(name):
 			return TokenPredicate(lambda tok: tok[0] == name).set_result(lambda tok,val: val[1])
-		for tokname, tokparser in self.tokens.iteritems():
+		for tokname, tokparser in tokens.iteritems():
 			match_token = token_matcher(tokname)
 			setattr(self, tokname, match_token)
+		# Keep literals apart from the rest -- they are always tried first
+		self.tokens = (
+			  [ (tokname, tokparser) for (tokname, tokparser) in tokens.iteritems() if isinstance(tokparser, Literal) ] 
+			+ [ (tokname, tokparser) for (tokname, tokparser) in tokens.iteritems() if not isinstance(tokparser, Literal) ])
 		
 	def lex(self, stream):
 		def gen():
 			while True:
-				for tokname, tokparser in self.tokens.iteritems():
+				for tokname, tokparser in self.tokens:
 					success, result = tokparser.try_parse(stream)
 					if success:
 						break
