@@ -52,9 +52,6 @@ type << cv_qualifier * (0,) + scoped_type + ptr_operator * (0,)
 if __name__ == '__main__':
 	
 	inputstr = "std::map<std::basic_string<char, std::char_traits<char>, std::allocator<char> >, int, std::less<std::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<const std::basic_string<char, std::char_traits<char>, std::allocator<char> >, int> > >"
-	#inputstr = "std::less<std::basic_string<char, std::char_traits<char>, std::allocator<char> > >"
-	#inputstr = "std::pair<const std::basic_string<char, std::char_traits<char>, std::allocator<char> >, int >"
-	#inputstr = "std::pair<const int, int >"
 
 	chars = TokenStream(iter(inputstr))
 
