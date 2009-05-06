@@ -37,7 +37,7 @@ class CLI(object):
 		
 		self.gdbsess.onFrameChange.subscribe(self.onFrameChange)
 		self.gdbsess.eventGdbOutput.subscribe(self.onGdbOutput)
-		self.gdbsess.eventGdbError.subscribe(self.onGdbErr)
+		self.gdbsess.eventGdbErr.subscribe(self.onGdbErr)
 		self.gdbsess.eventTargetOutput.subscribe(self.onTargetOutput)
 		
 	def commands(self):

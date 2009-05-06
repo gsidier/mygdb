@@ -214,7 +214,7 @@ class GdbSession(object):
 		self.onProcessed = EventSlot() # <no args>
 		self.onWatchUpdate = EventSlot() # var
 		self.eventGdbOutput = EventSlot() # msg
-		self.eventGdbError = EventSlot() # msg
+		self.eventGdbErr = EventSlot() # msg
 		self.eventTargetOutput = EventSlot() # msg
 
 	def err_check_response(self, on_response):
