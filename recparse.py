@@ -79,9 +79,9 @@ class Parser(object):
 
 	def __ge__(self, func):
 		"""
-		Assign a result function to this parser.
+		Return a *new* parser matching the same inputs, but with the provided result func.
 		"""
-		return self.set_result(func)
+		return Group(self).set_result(func)
 
 	def __or__(self, other):
 		"""
@@ -144,6 +144,9 @@ class Forward(Parser):
 	def __lshift__(self, parser):
 		self.parser = parser
 	
+	def set_result(self, func):
+		self.parser.set_result(func)
+
 	def _try_parse(self, stream):
 		if self.parser is None:
 			raise "Forgot to set forwarded parser expression."
