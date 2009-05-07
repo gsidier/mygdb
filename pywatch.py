@@ -127,24 +127,25 @@ class StdMapWatch(PyWatch):
 		self.root = self.register_watch(
 			"(%s)._M_t._M_impl._M_header",
 			(self.var,))
-		self.cpptype = parse_cpptype(self.type)
+		self.cpptype = parse_cpptype(self.type).value
 	
 	def _pyval(self):
 		res = {}
-		curr = self.register_watch("&(%s)", (self.root,))
+		ptr_root = self.register_watch("&(%s)", (self.root,))
 		
 		def rec(curr):
 			ptr_p = self.register_watch(
 				"(%s)._M_parent",
 				(curr,))
 			if ptr_p.pyval.addr != 0: # data node
+				pair_type = "std::pair< const %s, %s >" % (
+						self.cpptype.local.template_args[0],
+						self.cpptype.local.template_args[1])
 				casted = self.register_watch(
-					"('std::_Rb_tree_node<std::pair< %s, %s > >' *)(%s)" % (
-						self.cpptype.template_args[0],
-						self.cpptype.template_args[1]),
+					"('std::_Rb_tree_node< " + pair_type + " >' *)(%s)",
 					(ptr_p,))
-				key = self.eval("(%s)._M_value_field.first", (self,))
-				value = self.eval("(%s)._M_value_field.second", (self,))
+				key = self.eval("(%s)._M_value_field.first", (casted,))
+				value = self.eval("(%s)._M_value_field.second", (casted,))
 				res[key] = value
 			
 			ptr_r = self.register_watch(
@@ -154,5 +155,9 @@ class StdMapWatch(PyWatch):
 				"(%s)._M_left", 
 				(curr,))
 			if ptr_r.pyval.addr != curr.pyval.addr:
-				rec
+				rec(ptr_r)
+			if ptr_l.pyval.addr != curr.pyval.addr:
+				rec(ptr_l)
+			
+		rec(ptr_root)
 		return res
