@@ -77,6 +77,21 @@ ptr_operator      = lex.STAR + cv_qualifier * (0,) | lex.AMPERSAND
 type << cv_qualifier * (0,) + scoped_type + ptr_operator * (0,)   
 type.set_result(lambda tok,val: CppType(val[1][-1], val[1][:-1], val[0] + val[2]))
 
+
+def parse_cpptype(inputstr):
+	
+	chars = TokenStream(iter(inputstr))
+	tokens = lex.lex(chars)
+	toks = list(tokens.unconsumed)
+	tokstream = TokenStream(iter(toks))
+
+	success, result = type.try_parse(tokstream)
+	
+	if success:
+		return result
+	else:
+		raise SyntaxError
+	
 if __name__ == '__main__':
 	
 	import sys
@@ -86,18 +101,13 @@ if __name__ == '__main__':
 	else:
 		inputstr = "std::map<std::basic_string<char, std::char_traits<char>, std::allocator<char> >, int, std::less<std::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<const std::basic_string<char, std::char_traits<char>, std::allocator<char> >, int> > >"
 	print inputstr
-
-	chars = TokenStream(iter(inputstr))
-
-	tokens = lex.lex(chars)
-	toks = list(tokens.unconsumed)
-	print tokens
-	tokstream = TokenStream(iter(toks))
 	
-	success, result = type.try_parse(tokstream)
-	print success
-	if success:
-		print result.tokens
-		print result.value
+	result = parse_cpptype(inputstr)
+	
+	print result.tokens
+	print
+	print result.value
+	print
+	print repr(result.value)
 
 
