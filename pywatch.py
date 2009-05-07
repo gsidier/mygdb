@@ -1,4 +1,5 @@
 from watch import AbstractVar
+from cpptypes import parse_cpptype
 
 class PyWatch(AbstractVar):
 	
@@ -13,6 +14,8 @@ class PyWatch(AbstractVar):
 				return StdPairWatch(sess, var)
 			elif var.type.startswith('std::vector<') and var.type[-1] == '>':
 				return StdVectorWatch(sess, var)
+			elif var.type.startswith('std::map<') and var.type[-1] == '>':
+				return StdMapWatch(sess, var)
 			elif var.type == 'char *':
 				return CharPtrWatch(sess, var)
 			elif var.type == 'int':
@@ -29,7 +32,7 @@ class PyWatch(AbstractVar):
 		var = self.register_watch(expr, subs)
 		return var.value
 
-class PtrWatch(object):
+class PtrWatch(PyWatch):
 	def __init__(self, gdbsess, var):
 		PyWatch.__init__(self, gdbsess, var)
 	def _pyval(self):
@@ -124,6 +127,7 @@ class StdMapWatch(PyWatch):
 		self.root = self.register_watch(
 			"(%s)._M_t._M_impl._M_header",
 			(self.var,))
+		self.cpptype = parse_cpptype(self.type)
 	
 	def _pyval(self):
 		res = {}
@@ -135,7 +139,13 @@ class StdMapWatch(PyWatch):
 				(curr,))
 			if ptr_p.pyval.addr != 0: # data node
 				casted = self.register_watch(
-					"('std::_Rb_tree_node<std::pair<%s, %s> >' *)(%s)" % 
+					"('std::_Rb_tree_node<std::pair< %s, %s > >' *)(%s)" % (
+						self.cpptype.template_args[0],
+						self.cpptype.template_args[1]),
+					(ptr_p,))
+				key = self.eval("(%s)._M_value_field.first", (self,))
+				value = self.eval("(%s)._M_value_field.second", (self,))
+				res[key] = value
 			
 			ptr_r = self.register_watch(
 				"(%s)._M_right",
@@ -145,4 +155,4 @@ class StdMapWatch(PyWatch):
 				(curr,))
 			if ptr_r.pyval.addr != curr.pyval.addr:
 				rec
-
+		return res
