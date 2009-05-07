@@ -9,6 +9,8 @@ class PyWatch(AbstractVar):
 		if var.type is not None:
 			if var.type.startswith('std::basic_string<') and var.type[-1] == '>':
 				return StdStringWatch(sess, var)
+			elif var.type.startswith('std::pair<') and var.type[-1] == '>':
+				return StdPairWatch(sess, var)
 			elif var.type.startswith('std::vector<') and var.type[-1] == '>':
 				return StdVectorWatch(sess, var)
 			elif var.type == 'char *':
@@ -50,6 +52,20 @@ class IntWatch(PyWatch):
 		PyWatch.__init__(self, gdbsess, var)
 	def _pyval(self):
 		return int(self.value)
+
+class StdPairWatch(PyWatch):
+	def __init__(self, gdbsess, var):
+		PyWatch.__init__(self, gdbsess, var)
+		self.first = self.register_watch(
+			"(%s).first",
+			(self.var,)
+		)
+		self.second = self.register_watch(
+			"(%s).second",
+			(self.var,)
+		)
+	def _pyval(self):
+		return (self.first.pyval, self.second.pyval)
 
 class StdVectorWatch(PyWatch):
 	def __init__(self, gdbsess, var):
@@ -117,7 +133,7 @@ class StdMapWatch(PyWatch):
 			ptr_p = self.register_watch(
 				"(%s)._M_parent",
 				(curr,))
-			if ptr_p.value.addr != 0: # data node
+			if ptr_p.pyval.addr != 0: # data node
 				casted = self.register_watch(
 					"('std::_Rb_tree_node<std::pair<%s, %s> >' *)(%s)" % 
 			
@@ -127,6 +143,6 @@ class StdMapWatch(PyWatch):
 			ptr_l = self.register_watch(
 				"(%s)._M_left", 
 				(curr,))
-			if ptr_r.value.addr != curr.value.addr:
+			if ptr_r.pyval.addr != curr.pyval.addr:
 				rec
 
