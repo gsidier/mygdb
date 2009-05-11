@@ -211,6 +211,7 @@ class GdbSession(object):
 		self.onError = EventSlot() # token, msg
 		self.onFileChanged = EventSlot() # filename
 		self.onBreakpointSet = EventSlot() # breakpoint_desc
+		self.onBreakpointDel = EventSlot() # breakpoint_desc
 		self.onThreadSwitch = EventSlot() # threadid
 		self.onFrameChange = EventSlot() # frameinfo
 		self.onProcessed = EventSlot() # <no args>
@@ -372,6 +373,7 @@ class GdbSession(object):
 			'gdb': self.controller, 
 			'att': self.attach,
 			'b': self.setbreak,
+			'del': self.delbreak,
 			'f': self.file,
 			'r': self.run,
 			'c': self.cont,
@@ -391,7 +393,7 @@ class GdbSession(object):
 			raise Exception("Syntax error: Empty command")
 		func = items[0]
 		args = items[1:]
-		pycmd = "%s(%s)" % (func, ', '.join(repr(arg) for arg in args) )
+		pycmd = "%s(%s)" % (func, ', '.join(repr(arg) for arg in args))
 		self.runCommand(pycmd)
 	#
 	def runGdbCommand(self, cmd):
@@ -412,6 +414,10 @@ class GdbSession(object):
 		def on_response(desc):
 			self.onBreakpointSet.broadcast(desc)
 		self.controller.break_insert(loc, cond, temp, hardware, count, force, on_response=on_response)
+	def delbreak(self, bp):
+		def on_response(response):
+			self.onBreakpointDel.broadcast(int(bp))
+		self.controller.break_delete(bp, on_response=on_response)
 	def tbreak(self, loc=None, cond=None, count=None, thread=None, force=False):
 		return self.setbreak(loc=loc, cond=cond, count=count, thread=thread, force=force, temp=True)
 	def hbreak(self, loc=None, cond=None, count=None, thread=None, force=False):	
