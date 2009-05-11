@@ -135,7 +135,7 @@ class WatchedVar(object):
 class GdbSession(object):
 	"""
 	The aim of this class is to provide a high-level interface to a gdb session.
-	State info such as current source location, etc. is maintained.
+	State info such as current source location, currently set breakpoints, etc. is maintained.
 	
 	A list of watched variables is also maintained.
 	
@@ -181,6 +181,11 @@ class GdbSession(object):
 						raise Exception, "Timeout : request %s" % token
 				return on_response_sync.response
 	
+	_frame = None
+	_breakpoints = {} # num -> bkpt desc
+	breakpoints = property(lambda self: self._breakpoints)
+	_src_breakpoints = defaultdict(lambda: {}) # file -> line -> bkpt desc
+	src_breakpoints = property(lambda self: self._src_breakpoints)
 	_src_path = None
 	src_path = property(lambda self: self._src_path)
 	_src_line = None
@@ -193,7 +198,6 @@ class GdbSession(object):
 		self.log = logging.getLogger("gdb")
 		self.controller = self.MyGdbController(self)
 		
-		self._frame = None
 
 		self._response_handlers = {}
 		
@@ -411,12 +415,25 @@ class GdbSession(object):
 		return self.controller.target_attach(what)
 	#
 	def setbreak(self, loc=None, cond=None, temp=False, hardware=False, count=None, thread=None, force=False):
-		def on_response(desc):
-			self.onBreakpointSet.broadcast(desc)
+		def on_response(resp):
+			bkpt = resp.bkpt
+			num = int(bkpt.number)
+			self._breakpoints[num] = bkpt
+			if hasattr(bkpt, 'fullname') and hasattr(bkpt, 'line'):
+				line = int(bkpt.line)
+				self._src_breakpoints[bkpt.fullname][int(line)] = bkpt
+			self.onBreakpointSet.broadcast(resp)
 		self.controller.break_insert(loc, cond, temp, hardware, count, force, on_response=on_response)
 	def delbreak(self, bp):
 		def on_response(response):
-			self.onBreakpointDel.broadcast(int(bp))
+			num = int(bp)
+			if num in self._breakpoints:
+				bkpt = self._breakpoints.pop(num)
+				if hasattr(bkpt, 'fullname') and hasattr(bkpt, 'line'):
+					line = int(bkpt.line)
+					if bkpt.fullname in self._src_breakpoints and line in self._src_breakpoints[bkpt.fullname]:
+						self._src_breakpoints[bkpt.fullname].pop(line)
+			self.onBreakpointDel.broadcast(num)
 		self.controller.break_delete(bp, on_response=on_response)
 	def tbreak(self, loc=None, cond=None, count=None, thread=None, force=False):
 		return self.setbreak(loc=loc, cond=cond, count=count, thread=thread, force=force, temp=True)
