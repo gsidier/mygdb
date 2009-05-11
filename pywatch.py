@@ -10,7 +10,7 @@ class PyWatch(AbstractVar):
 		if var.type is not None:
 			if var.type == 'char' or var.type == 'const char':
 				return CharWatch(sess, var)
-			elif var.type == 'int' or var.type == 'const int':
+			elif var.type == 'int' or var.type == 'const int' or var.type == 'size_t' or var.type == 'const size_t':
 				return IntWatch(sess, var)
 			elif var.type.startswith('std::basic_string<') and var.type[-1] == '>':
 				return StdStringWatch(sess, var)
