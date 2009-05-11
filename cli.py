@@ -18,7 +18,7 @@ class CLI(object):
 	LINE_STATUS_POS_CURR = 0
 	LINE_STATUS_CHAR_CURR = '>'
 	
-	LINE_STYLE = "${NORMAL}"
+	LINE_STYLE = ""
 	CURR_LINE_STYLE = "${BOLD}${YELLOW}"
 	BREAKPOINT_STYLE = "${BG_RED}"
 	
@@ -67,19 +67,23 @@ class CLI(object):
 		first = max(1, line - self.NLINES_BEFORE)
 		last = min(len(self._src_lines), line + self.NLINES_AFTER)
 		ndigits = len(str(last))
-		format = "%(status)s %(lineno)" + str(ndigits) + "d  %(style)s%(line)s${NORMAL}"
+		format = "%(rowstyle)s%(status)s %(lineno)" + str(ndigits) + "d  %(style)s%(line)s${NORMAL}"
 		def printit():
 			print
 			for i in xrange(first, last + 1):
 				line = self._src_lines[i - 1]
 				line_status = [' '] * self.LINE_STATUS_NCHARS
+				rowstyle = ''
 				if i == self.gdbsess.src_line:
 					line_status[self.LINE_STATUS_POS_CURR] = self.LINE_STATUS_CHAR_CURR
 					style = self.CURR_LINE_STYLE
 				else:
 					style = self.LINE_STYLE
+				if self.gdbsess.src_path in self.gdbsess.src_breakpoints and i in self.gdbsess.src_breakpoints[self.gdbsess.src_path]:
+					rowstyle = self.BREAKPOINT_STYLE
 				line_status = ''.join(line_status)
 				print self._term.render(format % {
+					'rowstyle': rowstyle,
 					'status': line_status, 
 					'lineno': i, 
 					'style': style,
