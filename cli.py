@@ -20,9 +20,12 @@ class CLI(object):
 	
 	LINE_STYLE = "${NORMAL}"
 	CURR_LINE_STYLE = "${BOLD}${YELLOW}"
+	BREAKPOINT_STYLE = "${BG_RED}"
+	
+	CLI_ERR_STYLE = "${RED}"
 	
 	GDB_OUT_STYLE = "${CYAN}"
-	GDB_ERR_STYLE = "${RED}"
+	GDB_ERR_STYLE = "${RED}${BOLD}"
 	TARGET_OUT_STYLE = "${GREEN}"
 	
 	def __init__(self, gdbsess):
@@ -37,6 +40,8 @@ class CLI(object):
 		self._src_lines = []
 		
 		self.gdbsess.onFrameChange.subscribe(self.onFrameChange)
+		self.gdbsess.onBreakpointSet.subscribe(self.onBreakpointChange)
+		self.gdbsess.onBreakpointDel.subscribe(self.onBreakpointChange)
 		self.gdbsess.eventGdbOutput.subscribe(self.onGdbOutput)
 		self.gdbsess.eventGdbErr.subscribe(self.onGdbErr)
 		self.gdbsess.eventTargetOutput.subscribe(self.onTargetOutput)
@@ -125,7 +130,7 @@ class CLI(object):
 						self.interpreter.eval(cmd)
 						last_cmd = cmd
 					except Exception, e:
-						print "Error: ", e.message
+						print self._term.render("%sError: %s${NORMAL}" % (self.CLI_ERR_STYLE, e.message))
 			if idle:
 				sleep(0.001)
 	
@@ -139,6 +144,8 @@ class CLI(object):
 			self._src_lines = f.readlines()
 			f.close()
 		self.list()
+	def onBreakpointChange(self, bkpt):
+		print bkpt
 	def onGdbOutput(self, string):
 		def printGdbOutput():
 			print self._term.render("%s%s${NORMAL}" % (self.GDB_OUT_STYLE, string[:-1]))
@@ -152,7 +159,6 @@ class CLI(object):
 			print self._term.render("%s%s${NORMAL}" % (self.TARGET_OUT_STYLE, string[:-1]))
 		self._sync(printTargetOutput)
 
-
 class Interpreter(object):
 	
 	def __init__(self, commands):
@@ -162,10 +168,12 @@ class Interpreter(object):
 		items = cmd.split()
 		if items == []:
 			raise Exception("Syntax error: Empty command")
-		func = items[0]
+		cmdname = items[0]
+		if cmdname not in self.commands:
+			raise Exception("Command not found.")
+		func = self.commands[cmdname]
 		args = items[1:]
-		pycmd = "%s(%s)" % (func, ', '.join(repr(arg) for arg in args) )
-		eval(pycmd, self.commands)
+		func(*args)
 
 if __name__ == '__main__':
 	
