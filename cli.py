@@ -53,6 +53,7 @@ class CLI(object):
 			'l': self.list,
 			'disp': self.disp,
 			'p': self.py_print_expr,
+			'py': self.python_shell,
 		})
 		return cmds
 	
@@ -84,11 +85,20 @@ class CLI(object):
 	def disp(self):
 		pass
 	
-	def py_print_expr(self, expr):
+	def eval(self, expr):
 		var = self.gdbsess.var_create(expr, sync = True)
 		watch = PyWatch._wrap(self.gdbsess, var)
-		# self.add_var_watcher(var, watch)
-		print watch.pyval
+		return watch.pyval
+	
+	def py_print_expr(self, expr):
+		print self.eval(expr)
+	
+	def python_shell(self):
+		from IPython.Shell import IPShellEmbed
+		ipshell = IPShellEmbed(rc_override = {
+			'confirm_exit': 0,
+		})
+		ipshell()
 	
 	def interpreter_loop(self):
 		last_cmd = None
@@ -218,5 +228,7 @@ if __name__ == '__main__':
 		print "note: couldn't set magic quick input function"
 		q = quick()
 	
+	sleep(0.1) # give some time for the welcome message
+	
 	quick()
-
+	
