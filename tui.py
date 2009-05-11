@@ -407,7 +407,9 @@ class App(object):
 
 	def run_pyshell(self):
 		from IPython.Shell import IPShellEmbed
-		ipshell = IPShellEmbed()
+		ipshell = IPShellEmbed({
+			'confirm_exit': 0,
+		})
 		ipshell()
 		self.appmode = 'TUI' # return to TUI mode
 
