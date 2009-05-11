@@ -71,7 +71,7 @@ class CLI(object):
 		def printit():
 			print
 			for i in xrange(first, last + 1):
-				line = self._src_lines[i - 1]
+				line = self._src_lines[i - 1].expandtabs(4)
 				line_status = [' '] * self.LINE_STATUS_NCHARS
 				rowstyle = ''
 				if i == self.gdbsess.src_line:
@@ -149,7 +149,7 @@ class CLI(object):
 			f.close()
 		self.list()
 	def onBreakpointChange(self, bkpt):
-		print bkpt
+		pass
 	def onGdbOutput(self, string):
 		def printGdbOutput():
 			print self._term.render("%s%s${NORMAL}" % (self.GDB_OUT_STYLE, string[:-1]))
