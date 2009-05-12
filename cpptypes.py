@@ -72,10 +72,10 @@ nontemplate_scope = lex.IDENT                                                   
 scope             = template_scope | nontemplate_scope
 scoped_type       = Optional(lex.SCOPE) + DelimitedList(scope, lex.SCOPE)                    >= (lambda tok,val: val[1])
 cv_qualifier      = lex.CONST | lex.VOLATILE
-ptr_operator      = lex.STAR + cv_qualifier * (0,) | lex.AMPERSAND 
+ptr_operator      = (lex.STAR | lex.AMPERSAND) + cv_qualifier * (0,)                       >= (lambda tok,val: [val[0]] + val[1])
 
-type << cv_qualifier * (0,) + scoped_type + ptr_operator * (0,)   
-type.set_result(lambda tok,val: CppType(val[1][-1], val[1][:-1], val[0] + val[2]))
+type << cv_qualifier * (0,) + scoped_type + ptr_operator * (0,)
+type.set_result(lambda tok,val: CppType(val[1][-1], val[1][:-1], val[0] + sum(val[2], []) ))
 
 
 def parse_cpptype(inputstr):
