@@ -8,25 +8,25 @@ class lazy(object):
 	"""
 	Doubles up as a descriptor for lazy properties and a decorator for lazy functions.
 	Example usage: 
-	
-	# === as a descriptor:
-	class A(...):
-		foo = lazy(lambda self: self._foo())
-		def foo(self):
+		
+		# === as a descriptor:
+		class A(...):
+			foo = lazy(lambda self: self._foo())
+			def foo(self):
+				...
+		
+		# example:
+		a = A()
+		print a.foo # computed
+		print a.foo # looked up
+		
+		# === as a decorator:
+		@lazy
+		def foo():
 			...
-	
-	# example:
-	a = A()
-	print a.foo # computed
-	print a.foo # looked up
-	
-	# === as a decorator:
-	@lazy
-	def foo():
-		pass
-	
-	print foo() # computed
-	print foo() # looked up
+		
+		print foo() # computed
+		print foo() # looked up
 	"""	
 	
 	def __init__(self, thunk):
