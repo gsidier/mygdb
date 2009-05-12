@@ -17,6 +17,10 @@ lex = Lexer(
 	STRUCT     = Literal('struct'),
 	CLASS      = Literal('class'),
 	UNION      = Literal('union'),
+	LONG       = Literal('long'),
+	SHORT      = Literal('short'),
+	UNSIGNED   = Literal('unsigned'),
+	SIGNED     = Literal('signed'),
 
 	STAR       = Literal('*'),
 	AMPERSAND  = Literal('&'),
@@ -50,18 +54,20 @@ class CppType(object):
 	
 	scope = ()
 	
-	def __init__(self, local, scope, modifiers):
+	def __init__(self, local, scope, specifiers, declarator_ops):
 		self.local = local
 		self.scope = scope
-		self.modifiers = modifiers
+		self.specifiers = specifiers
+		self.declarator_ops = declarator_ops
 
 	def __repr__(self):
-		return "CppType(local=%s, scope=%s, modifiers=%s)" % (repr(self.local), repr(self.scope), repr(self.modifiers))
+		return "CppType(local=%s, scope=%s, specifiers=%s, declarator_ops=%s)" % (repr(self.local), repr(self.scope), repr(self.specifiers), repr(self.declarator_ops))
 
 	def __str__(self):
-		return ("%s %s" % (
+		return ("%s %s %s" % (
+			" ".join([ str(spec) for spec in self.specifiers ]),
 			"::".join([ str(s) for s in self.scope] + [str(self.local)]),
-			" ".join([ str(m) for m in self.modifiers]))).strip()
+			" ".join([ str(m) for m in self.declarator_ops]))).strip()
 
 # ========== PARSER ==========
 
@@ -72,10 +78,11 @@ nontemplate_scope = lex.IDENT                                                   
 scope             = template_scope | nontemplate_scope
 scoped_type       = Optional(lex.SCOPE) + DelimitedList(scope, lex.SCOPE)                    >= (lambda tok,val: val[1])
 cv_qualifier      = lex.CONST | lex.VOLATILE
+specifier         = lex.SHORT | lex.LONG | lex.SIGNED | lex.UNSIGNED
 ptr_operator      = (lex.STAR | lex.AMPERSAND) + cv_qualifier * (0,)                       >= (lambda tok,val: [val[0]] + val[1])
 
-type << cv_qualifier * (0,) + scoped_type + ptr_operator * (0,)
-type.set_result(lambda tok,val: CppType(val[1][-1], val[1][:-1], val[0] + sum(val[2], []) ))
+type << (cv_qualifier | specifier) * (0,) + scoped_type + ptr_operator * (0,)
+type.set_result(lambda tok,val: CppType(val[1][-1], val[1][:-1], val[0], sum(val[2], []) ))
 
 
 def parse_cpptype(inputstr):
