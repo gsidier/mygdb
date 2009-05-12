@@ -8,21 +8,26 @@ class PyWatch(AbstractVar):
 	@classmethod
 	def _wrap(cls, sess, var):
 		if var.type is not None:
-			if var.type == 'char' or var.type == 'const char':
+			# stripped var type of irrelevant qualifiers.
+			T = parse_cpptype(var.type).value
+			T.specifiers = [ spec for spec in T.specifiers if spec not in ('const', 'volatile', 'unsigned', 'signed') ]
+			T.declarator_ops = [ op for op in T.declarator_ops if op not in ('const', 'volatile') ]
+			type = str(T)
+			if type == 'char':
 				return CharWatch(sess, var)
-			elif var.type == 'int' or var.type == 'const int' or var.type == 'size_t' or var.type == 'const size_t':
+			elif type in ('int', 'long', 'long int', 'short', 'short int', 'size_t'):
 				return IntWatch(sess, var)
-			elif (var.type.startswith('std::basic_string<') and var.type[-1] == '>') or var.type == 'std::string' or var.type == 'string' :
+			elif (type.startswith('std::basic_string<') and type[-1] == '>') or type in ('std::string', 'string'):
 				return StdStringWatch(sess, var)
-			elif var.type.startswith('std::pair<') and var.type[-1] == '>':
+			elif type.startswith('std::pair<') and type[-1] == '>':
 				return StdPairWatch(sess, var)
-			elif var.type.startswith('std::vector<') and var.type[-1] == '>':
+			elif type.startswith('std::vector<') and type[-1] == '>':
 				return StdVectorWatch(sess, var)
-			elif var.type.startswith('std::map<') and var.type[-1] == '>':
+			elif type.startswith('std::map<') and type[-1] == '>':
 				return StdMapWatch(sess, var)
-			elif var.type == 'char *' or var.type == 'const char *' or var.type == 'char const *':
+			elif type == 'char *':
 				return CharPtrWatch(sess, var)
-			elif var.type[-1] == '*':
+			elif type[-1] == '*':
 				return PtrWatch(sess, var)
 
 		return PyWatch(sess, var)
