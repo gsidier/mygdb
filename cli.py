@@ -59,6 +59,7 @@ class CLI(object):
 			'disp': self.disp,
 			'p': self.py_print_expr,
 			'py': self.python_shell,
+			'type': self.print_type,
 		})
 		return cmds
 	
@@ -94,10 +95,17 @@ class CLI(object):
 	def disp(self):
 		pass
 	
-	def eval(self, expr):
+	def expr(self, expr):
 		var = self.gdbsess.var_create(expr, sync = True)
 		watch = PyWatch._wrap(self.gdbsess, var)
+		return watch
+	
+	def eval(self, expr):
+		watch = self.expr(expr)
 		return watch.pyval
+	
+	def print_type(self, expr):
+		print self.expr(expr).type
 	
 	def py_print_expr(self, expr):
 		print self.eval(expr)
