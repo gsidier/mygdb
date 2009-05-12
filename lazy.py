@@ -31,16 +31,17 @@ class lazy(object):
 	
 	def __init__(self, thunk):
 		self.thunk = thunk
+		self.cache = {}
 		self.value = Uncomputed
 
 	def __get__(self, instance, owner):
-		if self.value == Uncomputed:
-			self.value = self.thunk(instance)
-		return self.value
+		if self.cache.get(instance, Uncomputed) == Uncomputed:
+			self.cache[instance] = self.thunk(instance)
+		return self.cache[instance]
 	
 	def __set__(self, instance, thunk):
 		self.thunk = thunk
-		self.value = Uncomputed
+		self.cache[instance] = Uncomputed
 	
 	def __delete__(self, instance):
 		pass
