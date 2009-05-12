@@ -12,7 +12,7 @@ class PyWatch(AbstractVar):
 				return CharWatch(sess, var)
 			elif var.type == 'int' or var.type == 'const int' or var.type == 'size_t' or var.type == 'const size_t':
 				return IntWatch(sess, var)
-			elif var.type.startswith('std::basic_string<') and var.type[-1] == '>':
+			elif (var.type.startswith('std::basic_string<') and var.type[-1] == '>') or var.type == 'std::string' or var.type == 'string' :
 				return StdStringWatch(sess, var)
 			elif var.type.startswith('std::pair<') and var.type[-1] == '>':
 				return StdPairWatch(sess, var)
@@ -20,7 +20,7 @@ class PyWatch(AbstractVar):
 				return StdVectorWatch(sess, var)
 			elif var.type.startswith('std::map<') and var.type[-1] == '>':
 				return StdMapWatch(sess, var)
-			elif var.type == 'char *':
+			elif var.type == 'char *' or var.type == 'const char *' or var.type == 'char const *':
 				return CharPtrWatch(sess, var)
 			elif var.type[-1] == '*':
 				return PtrWatch(sess, var)
