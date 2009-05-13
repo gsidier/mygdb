@@ -39,9 +39,8 @@ class lazy(object):
 			self.cache[instance] = self.thunk(instance)
 		return self.cache[instance]
 	
-	def __set__(self, instance, thunk):
-		self.thunk = thunk
-		self.cache[instance] = Uncomputed
+	def __set__(self, instance, value):
+		self.cache[instance] = value
 	
 	def __delete__(self, instance):
 		pass
