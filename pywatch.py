@@ -8,7 +8,7 @@ class PyWatch(AbstractVar):
 	@classmethod
 	def _wrap(cls, sess, var):
 		if var.type is not None:
-			# stripped var type of irrelevant qualifiers.
+			# strip var type of irrelevant qualifiers.
 			T = parse_cpptype(var.type).value
 			T.specifiers = [ spec for spec in T.specifiers if spec not in ('const', 'volatile', 'unsigned', 'signed') ]
 			T.declarator_ops = [ op for op in T.declarator_ops if op not in ('const', 'volatile') ]
