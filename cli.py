@@ -8,6 +8,7 @@ from pywatch import PyWatch
 import logging
 from collections import deque
 from time import sleep
+import time
 
 class CLI(object):
 	
@@ -108,7 +109,9 @@ class CLI(object):
 		print self.expr(expr).type
 	
 	def py_print_expr(self, expr):
+		t0 = time.time()
 		print self.eval(expr)
+		print "(computed in %f seconds)" % (time.time() - t0)
 	
 	def python_shell(self):
 		from IPython.Shell import IPShellEmbed
