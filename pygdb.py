@@ -14,6 +14,7 @@ import recparse
 import gdbmi_output_parser
 from gdb_commands import GdbCommandBuilder
 from event import EventSlot, EventQueue
+from var import Var
 from watch import FilteredWatch
 
 class GdbMI(object):
@@ -116,22 +117,6 @@ class GdbController(GdbCommandBuilder):
 			self.target_output_handler(line)
 		self.log.debug("(TARGET stdout : closes)")
 
-class WatchedVar(object):
-	def __init__(self, name, expr, type, value, numchild, in_scope):
-		self.name = name
-		self.expr = expr
-		self.type = type
-		self.value = value
-		self.numchild = int(numchild)
-		self.in_scope = in_scope
-		self.children = None
-
-	def __repr__(self):
-		return "WatchedVar(name=%s, expr=%s, type=%s, value=%s, numchild=%s)" % (self.name, self.expr, self.type, self.value, self.numchild)
-
-	def __str__(self):
-		return self.__repr__()
-
 class GdbSession(object):
 	"""
 	The aim of this class is to provide a high-level interface to a gdb session.
@@ -179,6 +164,7 @@ class GdbSession(object):
 					time.sleep(0.01)
 					if time.time() - t0 > TIMEOUT:
 						raise Exception, "Timeout : request %s" % token
+				self.session.log.debug("Got sync response in %f seconds" % (time.time() - t0))
 				return on_response_sync.response
 	
 	_frame = None
@@ -201,7 +187,6 @@ class GdbSession(object):
 
 		self._response_handlers = {}
 		
-		self._watch = {}
 		self._vars = {} # name -> var
 		self._watchers = defaultdict(lambda: {})
 		self._watcher_slots = defaultdict(lambda: EventSlot())
@@ -458,15 +443,11 @@ class GdbSession(object):
 	def var_create(self, expr, sync = False):
 		def on_response(response):
 			self.log.debug("VAR CREATE : %s" % response)
-			v = WatchedVar(name = response.name, expr = expr, type = response.type, value = response.get('value'), numchild = response.numchild, in_scope = True)
-			self._watch[v.name] = v
+			v = Var(self, name = response.name, expr = expr, type = response.type, value = response.get('value'), numchild = response.numchild, in_scope = True)
 			self._vars[v.name] = v
-			self.log.debug("WATCHLIST : %s" % self._watch)
 			if v.value is None:
 				self.var_eval(v.name)
-			self.var_path_expr(v.name, sync = sync)
-			self.var_list_children(v.name, sync = sync)
-			self._update_watch(v)
+			#self._update_watch(v)
 			return v
 		return self.controller.var_create(expr, on_response = on_response, sync = sync)
 	def var_update(self):
@@ -479,15 +460,14 @@ class GdbSession(object):
 		return self.controller.var_update(on_response = on_response)
 	def var_list_children(self, name, sync = False):
 		def on_response(response):
-			v = self.get_watched_var(name)
-			if v is not None and hasattr(response, 'children'):
-				v.children = {}
-				for tag,child in response.children:
-					childv = WatchedVar(name = child.name, expr = child.exp, type = child.get('type', None), value = None, numchild = child.numchild, in_scope = True)
-					v.children[child.exp] = childv
-					self._vars[childv.name] = childv 
-					self.var_path_expr(child.name, sync = sync)
-					self.var_eval(child.name, sync = sync)
+			children = {}
+			for tag,child in response.children:
+				childv = Var(self, name = child.name, expr = child.exp, type = child.get('type', None), value = None, numchild = child.numchild, in_scope = True)
+				children[child.exp] = childv
+				self._vars[childv.name] = childv 
+				self.var_path_expr(child.name, sync = sync)
+				self.var_eval(child.name, sync = sync)
+			return children
 		return self.controller.var_list_children(name, on_response = on_response, sync = sync)
 	def var_eval(self, name, sync = False):
 		def on_response(response):
@@ -500,8 +480,9 @@ class GdbSession(object):
 	def var_path_expr(self, name, sync = False):
 		def on_response(response):
 			v = self.get_watched_var(name)
-			v.path_expr = response.get('path_expr', None)
-			return v.path_expr
+			if v is not None:
+				v.path_expr = response.get('path_expr', None)
+				return v.path_expr
 		return self.controller.var_path_expr(name, on_response = on_response, sync = sync)
 
 if __name__ == '__main__':
