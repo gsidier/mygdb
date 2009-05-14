@@ -161,7 +161,7 @@ class GdbSession(object):
 				TIMEOUT = 10.
 				t0 = time.time()
 				while self.session._response_handlers.has_key(str(token)) :#and not on_response_sync.got_response:
-					time.sleep(0.01)
+					time.sleep(0.001)
 					if time.time() - t0 > TIMEOUT:
 						raise Exception, "Timeout : request %s" % token
 				self.session.log.debug("Got sync response in %f seconds" % (time.time() - t0))
