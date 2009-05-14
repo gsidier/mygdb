@@ -160,26 +160,23 @@ class StdMapWatch(PyWatch):
 			self.cpptype.local.template_args[0],
 			self.cpptype.local.template_args[1])
 	
-		def rec(curr):
+		def rec(curr, curr_expr):
 			if curr.pyval.addr == 0:
 				return
 			
-			casted = self.register_watch(
-				"('std::_Rb_tree_node< " + pair_type + " >' *)(%s)",
-				(curr,))
-			key = self.eval("(%s)._M_value_field.first", (casted,))
-			value = self.eval("(%s)._M_value_field.second", (casted,))
+			casted_expr = "(('std::_Rb_tree_node< " + pair_type + " >' *)(%s))" % curr_expr
+			key = self.eval("(%s)._M_value_field.first" % casted_expr)
+			value = self.eval("(%s)._M_value_field.second" % casted_expr)
 			res[key] = value
 			
-			ptr_r = self.register_watch(
-				"(%s)._M_right",
-				(curr,))
-			ptr_l = self.register_watch(
-				"(%s)._M_left", 
-				(curr,))
-			rec(ptr_r)
-			rec(ptr_l)
+			ptr_r_expr = "(%s)._M_right" % curr_expr
+			ptr_r = self.register_watch(ptr_r_expr)
+			ptr_l_expr = "(%s)._M_left" % curr_expr
+			ptr_l = self.register_watch(ptr_l_expr)
+
+			rec(ptr_r, ptr_r_expr)
+			rec(ptr_l, ptr_r_expr)
 			
-		rec(self.ptr_root)
+		rec(self.ptr_root, self.ptr_root.path_expr)
 		return res
 
