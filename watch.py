@@ -63,7 +63,7 @@ class AbstractVar(object):
 			self.var.path_expr = self.gdbsess.var_path_expr(self.var.name, sync = True)
 		return self.var.path_expr
 	
-	def register_watch(self, expr, depends):
+	def register_watch(self, expr, depends = ()):
 		e = expr % tuple(v.path_expr for v in depends)
 			
 		v = self.gdbsess.var_create(e, sync = True)
