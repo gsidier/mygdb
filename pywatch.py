@@ -164,18 +164,18 @@ class StdMapWatch(PyWatch):
 			if curr.pyval.addr == 0:
 				return
 			
-			casted_expr = "(('std::_Rb_tree_node< " + pair_type + " >' *)(%s))" % curr_expr
+			casted_expr = "('std::_Rb_tree_node< " + pair_type + " >' *)(%s)" % curr_expr
 			key = self.eval("(%s)._M_value_field.first" % casted_expr)
 			value = self.eval("(%s)._M_value_field.second" % casted_expr)
 			res[key] = value
 			
-			ptr_r_expr = "(%s)._M_right" % curr_expr
+			ptr_r_expr = "%s._M_right" % curr_expr
 			ptr_r = self.register_watch(ptr_r_expr)
-			ptr_l_expr = "(%s)._M_left" % curr_expr
+			ptr_l_expr = "%s._M_left" % curr_expr
 			ptr_l = self.register_watch(ptr_l_expr)
 
 			rec(ptr_r, ptr_r_expr)
-			rec(ptr_l, ptr_r_expr)
+			rec(ptr_l, ptr_l_expr)
 			
 		rec(self.ptr_root, self.ptr_root.path_expr)
 		return res
