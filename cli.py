@@ -145,7 +145,7 @@ class CLI(object):
 						self.interpreter.eval(cmd)
 						last_cmd = cmd
 					except Exception, e:
-						print self._term.render("%sError: %s${NORMAL}" % (self.CLI_ERR_STYLE, e.message))
+						print self._term.render("%sError: %s${NORMAL}" % (self.CLI_ERR_STYLE, str(e)))
 			if idle:
 				sleep(0.001)
 	
