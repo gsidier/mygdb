@@ -56,6 +56,7 @@ class CLI(object):
 		cmds = {}
 		cmds.update(self.gdbsess.commands())
 		cmds.update({
+			'help': self.help,
 			'l': self.list,
 			'disp': self.disp,
 			'p': self.py_print_expr,
@@ -63,6 +64,10 @@ class CLI(object):
 			'type': self.print_type,
 		})
 		return cmds
+	
+	def help(self):
+		for cmd in self.interpreter.commands:
+			print cmd
 	
 	def list(self):
 		line = self.gdbsess.src_line or 1
