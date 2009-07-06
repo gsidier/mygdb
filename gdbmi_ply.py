@@ -39,19 +39,25 @@ def p_optional_TOKEN_0(p):
 def p_optional_TOKEN_1(p):
 	'optional_TOKEN : TOKEN'
 	p[0] = p[1]
+def p_optional_results_0(p):
+	'optional_results : '
+	p[0] = None
+def p_optional_results_1(p):
+	'optional_results : results'
+	p[0] = p[1]
 
 # Stream Records
 def p_gdbout(p):
 	'gdbout : TILDE C_STR'
-	print "GDB OUTPUT: ", p[2]
+	#~print "GDB OUTPUT: ", p[2]
 	p[0] = p[2]
 def p_targetout(p):
 	'targetout : AT C_STR'
-	print "TARGET OUTPUT: ", p[2]
+	#~print "TARGET OUTPUT: ", p[2]
 	p[0] = p[2]
 def p_gdberr(p):
 	'gdberr : AMPERS C_STR'
-	print "GDB ERR: ", p[2]
+	#~print "GDB ERR: ", p[2]
 	p[0] = p[2]
 def p_stream_rec(p):
 	"""stream_rec : gdbout
@@ -65,19 +71,19 @@ def p_async_output1(p):
 	'async_output : IDENT'
 	p[0] = (p[1], [])
 def p_async_output2(p):
-	'async_output : IDENT results'
-	p[0] = (p[1], p[2])
+	'async_output : IDENT COMMA results'
+	p[0] = (p[1], p[3])
 def p_notify_msg(p):
 	'notify_msg : optional_TOKEN EQ async_output'
-	print "Notify Msg:", p[3]
+	#~print "Notify Msg:", p[3]
 	p[0] = p[3]
 def p_exec_msg(p):
 	'exec_msg : optional_TOKEN STAR async_output'
-	print "Exec Msg:", p[3]
+	#~print "Exec Msg:", p[3]
 	p[0] = p[3]
 def p_status_msg(p):
 	'status_msg : optional_TOKEN PLUS async_output'
-	print "Status Msg:", p[3]
+	#~print "Status Msg:", p[3]
 	p[0] = p[3]
 def p_async_rec(p):
 	"""async_rec : notify_msg
@@ -120,15 +126,9 @@ def p_value(p):
 	         | list
 	"""
 	p[0] = p[1]
-def p_optional_results_0(p):
-	'optional_results : '
-	p[0] = None
-def p_optional_results_1(p):
-	'optional_results : results'
-	p[0] = p[1]
 def p_result_rec(p):
 	'result_rec : optional_TOKEN HAT IDENT optional_results'
-	print "Result Rec[", p[1], "] :", p[4]
+	#~print "Result Rec[", p[1], "] :", p[4]
 
 # Start Rule:
 def p_gdbmi_output(p):
@@ -141,4 +141,15 @@ def p_gdbmi_output(p):
 
 import ply.yacc as yacc
 yacc.yacc(start = 'gdbmi_output')
+
+if __name__ == '__main__':
+	
+	inputstr = '1000003*stopped,reason="breakpoint-hit",bkptno="1",thread-id="0",frame={addr="0x08048428",func="main",args=[{name="argc",value="1"},{name="argv",value="0xbfbb3cb4"}],file="hello.c",fullname="/some/path/to/hello.c",line="16"}\n'
+	p = yacc.parser
+	p.parse(inputstr)
+	
+	from timeit import Timer
+	
+	timer = Timer(lambda: p.parse(inputstr))
+	print timer.timeit(number = 1000)
 
